@@ -18,4 +18,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, Meta = (AutoCreateRefTerm = "OnBuyComplete"))
 	void BuyUpgrade(const FOnBuyComplete& OnBuyComplete);
+
+private:
+	TSharedPtr<FJsonObject> BuildCheckoutRequestJson();
 };
