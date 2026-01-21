@@ -16,7 +16,17 @@ A Sentry-themed tower defence game written for Unreal Engine in C++/Blueprints f
 ## System requirements
 
 * Windows
-* Unreal Engine 5.5
+* Unreal Engine 5.7
+
+## How to run locally
+* Get the [Epic Games Launcher](https://store.epicgames.com/en-US/download)
+* Navigate to Unreal Engine -> Library and then click on "Engine Versions +" - Select Engine version 5.7.X
+* After succesfully downloaded (needs to happen only once) you can select either the "SentryTower.uproject" in your device folder or it shows up in the Epic Games Launcher under "My Projects"
+* Once in the Editor you can click on the Green play icon (Arrow) to get the demo running
+
+## Features/Errors
+*  https://github.com/sentry-demos/unreal/blob/main/CONTRIBUTING.md
+
 
 ## Third-party assets
 
