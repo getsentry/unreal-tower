@@ -119,13 +119,6 @@ NS_SWIFT_NAME(Span)
 - (void)setDataValue:(nullable id)value forKey:(NSString *)key NS_SWIFT_NAME(setData(value:key:));
 
 /**
- * Use @c setDataValue instead. This method calls @c setDataValue, was added by mistake, and will be
- * removed in a future version.
- */
-- (void)setExtraValue:(nullable id)value
-               forKey:(NSString *)key DEPRECATED_ATTRIBUTE NS_SWIFT_NAME(setExtra(value:key:));
-
-/**
  * Removes a data value.
  */
 - (void)removeDataForKey:(NSString *)key NS_SWIFT_NAME(removeData(key:));
@@ -187,6 +180,8 @@ NS_SWIFT_NAME(Span)
  * @return NSString.
  */
 - (nullable NSString *)baggageHttpHeader;
+
+- (NSDictionary<NSString *, id> *)serialize;
 
 @end
 

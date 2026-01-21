@@ -5,57 +5,74 @@
 #if USE_SENTRY_NATIVE
 
 #include "SentryDefines.h"
+#include "SentrySettings.h"
 
-#include "Misc/OutputDeviceRedirector.h"
+#include "Utils/SentryPlatformDetectionUtils.h"
+
 #include "Misc/Paths.h"
-#include "Windows/Infrastructure/WindowsSentryConverters.h"
-#include "Windows/WindowsPlatformStackWalk.h"
 
-static void PrintCrashLog(const sentry_ucontext_t* uctx)
+void FWindowsSentrySubsystem::InitWithSettings(const USentrySettings* Settings, USentryBeforeSendHandler* BeforeSendHandler, USentryBeforeBreadcrumbHandler* BeforeBreadcrumbHandler, USentryBeforeLogHandler* BeforeLogHandler, USentryTraceSampler* TraceSampler)
 {
-#if !UE_VERSION_OLDER_THAN(5, 0, 0)
-	FWindowsSentryConverters::SentryCrashContextToString(uctx, GErrorExceptionDescription, UE_ARRAY_COUNT(GErrorExceptionDescription));
+	// Detect Wine/Proton before initializing
+	WineProtonInfo = FSentryPlatformDetectionUtils::DetectWineProton();
 
-	const SIZE_T StackTraceSize = 65535;
+	// Call parent implementation (handles crash logger initialization)
+	FMicrosoftSentrySubsystem::InitWithSettings(Settings, BeforeSendHandler, BeforeBreadcrumbHandler, BeforeLogHandler, TraceSampler);
 
-#if !UE_VERSION_OLDER_THAN(5, 6, 0)
-	ANSICHAR* StackTrace = (ANSICHAR*)FMemory::Malloc(StackTraceSize);
-#else
-	ANSICHAR* StackTrace = (ANSICHAR*)GMalloc->Malloc(StackTraceSize);
-#endif // !UE_VERSION_OLDER_THAN(5, 6, 0)
+	// Add Wine/Proton context for all events if detected
+	if (WineProtonInfo.bIsRunningUnderWine && IsEnabled())
+	{
+		// Set Runtime context (Wine/Proton)
+		TMap<FString, FSentryVariant> RuntimeContext;
+		RuntimeContext.Add(TEXT("name"), FSentryPlatformDetectionUtils::GetRuntimeName(WineProtonInfo));
+		RuntimeContext.Add(TEXT("version"), FSentryPlatformDetectionUtils::GetRuntimeVersion(WineProtonInfo));
+		SetContext(TEXT("runtime"), RuntimeContext);
 
-	StackTrace[0] = 0;
+		// Override OS context when running under Wine/Proton (always show Linux, not Windows)
+		TMap<FString, FSentryVariant> OSContext;
+		OSContext.Add(TEXT("type"), TEXT("os")); // Explicitly set context type
 
-	// Currently raw crash data stored in `uctx` can be utilized for stalk walking on Windows only
-	void* ProgramCounter = uctx->exception_ptrs.ExceptionRecord->ExceptionAddress;
+		// Detect specific Linux distros
+		if (FSentryPlatformDetectionUtils::IsSteamOS())
+		{
+			OSContext.Add(TEXT("name"), TEXT("SteamOS"));
+			SetTag(TEXT("steamos"), TEXT("true"));
+			UE_LOG(LogSentrySdk, Log, TEXT("Overriding OS context: SteamOS (detected via Wine/Proton)"));
+		}
+		else if (FSentryPlatformDetectionUtils::IsBazzite())
+		{
+			OSContext.Add(TEXT("name"), TEXT("Bazzite"));
+			SetTag(TEXT("bazzite"), TEXT("true"));
+			UE_LOG(LogSentrySdk, Log, TEXT("Overriding OS context: Bazzite (detected via Wine/Proton)"));
+		}
+		else
+		{
+			// Default to "Linux" for unknown distros
+			OSContext.Add(TEXT("name"), TEXT("Linux"));
+			UE_LOG(LogSentrySdk, Log, TEXT("Overriding OS context: Linux (detected via Wine/Proton)"));
+		}
 
-	FPlatformStackWalk::StackWalkAndDump(StackTrace, StackTraceSize, ProgramCounter);
+		SetContext(TEXT("os"), OSContext);
 
-#if !UE_VERSION_OLDER_THAN(5, 6, 0)
-	FCString::StrncatTruncateDest(GErrorHist, UE_ARRAY_COUNT(GErrorHist), GErrorExceptionDescription);
-	FCString::StrncatTruncateDest(GErrorHist, UE_ARRAY_COUNT(GErrorHist), TEXT("\r\n\r\n"));
-	FCString::StrncatTruncateDest(GErrorHist, UE_ARRAY_COUNT(GErrorHist), ANSI_TO_TCHAR(StackTrace));
-#else
-	FCString::Strncat(GErrorHist, GErrorExceptionDescription, UE_ARRAY_COUNT(GErrorHist));
-	FCString::Strncat(GErrorHist, TEXT("\r\n\r\n"), UE_ARRAY_COUNT(GErrorHist));
-	FCString::Strncat(GErrorHist, ANSI_TO_TCHAR(StackTrace), UE_ARRAY_COUNT(GErrorHist));
-#endif // !UE_VERSION_OLDER_THAN(5, 6, 0)
-
-#if !NO_LOGGING
-	FDebug::LogFormattedMessageWithCallstack(LogSentrySdk.GetCategoryName(), __FILE__, __LINE__, TEXT("=== Critical error: ==="), GErrorHist, ELogVerbosity::Error);
-#endif // !NO_LOGGING
-
-#if !UE_VERSION_OLDER_THAN(5, 1, 0)
-	GLog->Panic();
-#endif // !UE_VERSION_OLDER_THAN(5, 1, 0)
-
-#if !UE_VERSION_OLDER_THAN(5, 6, 0)
-	FMemory::Free(StackTrace);
-#else
-	GMalloc->Free(StackTrace);
-#endif // !UE_VERSION_OLDER_THAN(5, 6, 0)
-
-#endif // !UE_VERSION_OLDER_THAN(5, 0, 0)
+		// Set platform tags
+		SetTag(TEXT("compatibility"), WineProtonInfo.bIsProton ? TEXT("proton") : TEXT("wine"));
+		if (!WineProtonInfo.Version.IsEmpty())
+		{
+			SetTag(TEXT("wine_version"), WineProtonInfo.Version);
+		}
+		if (WineProtonInfo.bIsProton && !WineProtonInfo.ProtonBuildName.IsEmpty())
+		{
+			SetTag(TEXT("proton_build"), WineProtonInfo.ProtonBuildName);
+		}
+		if (WineProtonInfo.bIsExperimental)
+		{
+			SetTag(TEXT("proton_experimental"), TEXT("true"));
+		}
+		if (FSentryPlatformDetectionUtils::IsRunningSteam())
+		{
+			SetTag(TEXT("steam"), TEXT("true"));
+		}
+	}
 }
 
 void FWindowsSentrySubsystem::ConfigureHandlerPath(sentry_options_t* Options)
@@ -64,19 +81,24 @@ void FWindowsSentrySubsystem::ConfigureHandlerPath(sentry_options_t* Options)
 
 	if (!FPaths::FileExists(HandlerPath))
 	{
-		UE_LOG(LogSentrySdk, Log, TEXT("Crashpad executable couldn't be found so Breakpad will be used instead. Please make sure that the plugin was rebuilt to avoid initialization failure."));
+		UE_LOG(LogSentrySdk, Error, TEXT("Crashpad executable couldn't be found."));
 		return;
 	}
 
 	sentry_options_set_handler_pathw(Options, *HandlerPath);
+
+	// Enable stack capture adjustment for Wine/Proton
+	if (WineProtonInfo.bIsRunningUnderWine)
+	{
+		UE_LOG(LogSentrySdk, Log, TEXT("Enabling Crashpad stack capture adjustment for Wine/Proton compatibility"));
+		sentry_options_set_crashpad_limit_stack_capture_to_sp(Options, 1);
+	}
 }
 
 sentry_value_t FWindowsSentrySubsystem::OnCrash(const sentry_ucontext_t* uctx, sentry_value_t event, void* closure)
 {
-	// Ensures that error message and corresponding callstack flushed to a log file (if available)
-	// before it's attached to the captured crash event and uploaded to Sentry.
-	PrintCrashLog(uctx);
-
+	// Windows-specific crash handling can go here if needed in the future
+	// For now, just delegate to parent which handles the crash logger
 	return FMicrosoftSentrySubsystem::OnCrash(uctx, event, closure);
 }
 

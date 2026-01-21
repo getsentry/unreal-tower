@@ -18,6 +18,7 @@ static NSString const *SENTRY_TRACE_TYPE = @"trace";
 
 NS_SWIFT_NAME(SpanContext)
 @interface SentrySpanContext : NSObject <SentrySerializable>
+
 SENTRY_NO_INIT
 
 /**

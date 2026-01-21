@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include "SentryVariant.h"
+
 #include "Infrastructure/AndroidSentryJavaObjectWrapper.h"
 
 class FAndroidSentryTransactionOptions : public FSentryJavaObjectWrapper
@@ -11,10 +13,12 @@ public:
 
 	void SetupClassMethods();
 
-	void SetCustomSamplingContext(const TMap<FString, FString>& data);
+	void SetCustomSamplingContext(const TMap<FString, FSentryVariant>& data);
+	void SetBindToScope(bool bindToScope);
 
 private:
 	FSentryJavaMethod SetCustomSamplingContextMethod;
+	FSentryJavaMethod SetBindToScopeMethod;
 };
 
 typedef FAndroidSentryTransactionOptions FPlatformSentryTransactionOptions;

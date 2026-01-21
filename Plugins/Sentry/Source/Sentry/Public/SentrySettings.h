@@ -4,11 +4,14 @@
 
 #include "CoreMinimal.h"
 #include "Engine/EngineTypes.h"
+#include "Logging/LogVerbosity.h"
+#include "SentryDataTypes.h"
 #include "UObject/NoExportTypes.h"
 #include "SentrySettings.generated.h"
 
 class USentryBeforeSendHandler;
 class USentryBeforeBreadcrumbHandler;
+class USentryBeforeLogHandler;
 class USentryTraceSampler;
 
 UENUM(BlueprintType)
@@ -88,6 +91,32 @@ struct FAutomaticBreadcrumbsForLogs
 
 	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General",
 		Meta = (DisplayName = "Verbose/VeryVerbose", ToolTip = "Flag indicating whether to automatically add breadcrumb when printing log message with Verbose/VeryVerbose verbosity level."))
+	bool bOnDebugLog = false;
+};
+
+USTRUCT(BlueprintType)
+struct FStructuredLoggingLevels
+{
+	GENERATED_BODY()
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General",
+		Meta = (DisplayName = "Fatal", ToolTip = "Flag indicating whether to forward Fatal log messages to Sentry structured logging."))
+	bool bOnFatalLog = true;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General",
+		Meta = (DisplayName = "Error", ToolTip = "Flag indicating whether to forward Error log messages to Sentry structured logging."))
+	bool bOnErrorLog = true;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General",
+		Meta = (DisplayName = "Warning", ToolTip = "Flag indicating whether to forward Warning log messages to Sentry structured logging."))
+	bool bOnWarningLog = true;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General",
+		Meta = (DisplayName = "Display/Log", ToolTip = "Flag indicating whether to forward Display/Log messages to Sentry structured logging."))
+	bool bOnInfoLog = false;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General",
+		Meta = (DisplayName = "Verbose/VeryVerbose", ToolTip = "Flag indicating whether to forward Verbose/VeryVerbose messages to Sentry structured logging."))
 	bool bOnDebugLog = false;
 };
 
@@ -229,6 +258,22 @@ class SENTRY_API USentrySettings : public UObject
 		Meta = (DisplayName = "Max attachment size in bytes", Tooltip = "Max attachment size for each attachment in bytes. Default is 20 MiB compressed but this size is planned to be increased. Please also check the maximum attachment size of Relay to make sure your attachments don't get discarded there: https://docs.sentry.io/product/relay/options/"))
 	int32 MaxAttachmentSize;
 
+	UPROPERTY(Config, EditAnywhere, Category = "General|Structured Logging",
+		Meta = (DisplayName = "Enable structured logging", ToolTip = "Flag indicating whether to enable structured logging that forwards UE_LOG calls to Sentry logger."))
+	bool EnableStructuredLogging;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General|Structured Logging",
+		Meta = (DisplayName = "Structured logging categories", ToolTip = "List of UE_LOG categories to forward to Sentry structured logging. Leave empty to forward all.", EditCondition = "EnableStructuredLogging"))
+	TArray<FString> StructuredLoggingCategories;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General|Structured Logging",
+		Meta = (DisplayName = "Forward log messages with verbosity level", EditCondition = "EnableStructuredLogging"))
+	FStructuredLoggingLevels StructuredLoggingLevels;
+
+	UPROPERTY(Config, EditAnywhere, Category = "General|Structured Logging",
+		Meta = (DisplayName = "Also send breadcrumbs", ToolTip = "Whether to also send breadcrumbs when structured logging is enabled.", EditCondition = "EnableStructuredLogging"))
+	bool bSendBreadcrumbsWithStructuredLogging;
+
 	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General|Breadcrumbs",
 		Meta = (DisplayName = "Max breadcrumbs", Tooltip = "Total amount of breadcrumbs that should be captured."))
 	int32 MaxBreadcrumbs;
@@ -273,6 +318,10 @@ class SENTRY_API USentrySettings : public UObject
 		Meta = (DisplayName = "Custom `beforeBreadcrumb` event handler", ToolTip = "Custom handler for processing breadcrumbs before adding them to the scope."))
 	TSubclassOf<USentryBeforeBreadcrumbHandler> BeforeBreadcrumbHandler;
 
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General|Hooks",
+		Meta = (DisplayName = "Custom `beforeLog` event handler", ToolTip = "Custom handler for processing structured logs before sending them to Sentry."))
+	TSubclassOf<USentryBeforeLogHandler> BeforeLogHandler;
+
 	UPROPERTY(Config, EditAnywhere, Category = "General|Windows",
 		Meta = (DisplayName = "Override Windows default crash capturing mechanism (UE 5.2+)", ToolTip = "Flag indicating whether to capture crashes automatically on Windows as an alternative to Crash Reporter."))
 	bool EnableAutoCrashCapturing;
@@ -285,12 +334,16 @@ class SENTRY_API USentrySettings : public UObject
 		Meta = (DisplayName = "Delay app shutdown until crash report uploaded (for Crashpad only)", ToolTip = "Flag indicating whether Crashpad should delay application shutdown until the upload of the crash report is completed. It is useful in Docker environment where the life cycle of all processes is bound by the root process."))
 	bool CrashpadWaitForUpload;
 
+	UPROPERTY(Config, EditAnywhere, Category = "General|Native",
+		Meta = (DisplayName = "Enable logging during crash handling", ToolTip = "Flag indicating whether the SDK should log additional crash information (such as stack traces and error messages). This is intended for debug builds only and is not safe for production use."))
+	bool EnableOnCrashLogging;
+
 	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General|Mobile",
 		Meta = (DisplayName = "In-app includes (for Android/Apple only)", Tooltip = "A list of string prefixes of module names that belong to the app."))
 	TArray<FString> InAppInclude;
 
 	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General|Mobile",
-		Meta = (DisplayName = "In-app excludes (for Android/Apple only)", Tooltip = "A list of string prefixes of module names that don't belong to the app."))
+		Meta = (DisplayName = "In-app excludes (for Android only)", Tooltip = "A list of string prefixes of module names that don't belong to the app."))
 	TArray<FString> InAppExclude;
 
 	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General|Mobile",
@@ -311,7 +364,7 @@ class SENTRY_API USentrySettings : public UObject
 	float TracesSampleRate;
 
 	UPROPERTY(Config, EditAnywhere, Category = "General|Performance Monitoring",
-		Meta = (DisplayName = "Traces sampler (for Android/Apple only)", ToolTip = "Custom handler for determining traces sample rate based on the sampling context.",
+		Meta = (DisplayName = "Traces sampler", ToolTip = "Custom handler for determining traces sample rate based on the sampling context.",
 			EditCondition = "EnableTracing && SamplingType == ESentryTracesSamplingType::TracesSampler", EditConditionHides))
 	TSubclassOf<USentryTraceSampler> TracesSampler;
 
@@ -368,6 +421,18 @@ class SENTRY_API USentrySettings : public UObject
 		Meta = (DisplayName = "Crash Reporter Endpoint", ToolTip = "Endpoint that Unreal Engine Crah Reporter should use in order to upload crash data to Sentry."))
 	FString CrashReporterUrl;
 
+	UPROPERTY(Config, EditAnywhere, Category = "Crash Reporter",
+		Meta = (DisplayName = "Allow Crash Reporter context propagation", ToolTip = "Flag indicating whether to automatically propagate additional data (e.g., tags, context) set via Sentry SDK interface to Crash Reporter."))
+	bool EnableCrashReporterContextPropagation;
+
+	UPROPERTY(Config, EditAnywhere, Category = "General|Consent",
+		Meta = (DisplayName = "Require User Consent (for Windows/Linux only)", ToolTip = "True if user's consent is required before uploading crash data. Currently this feature is supported for Windows and Linux only."))
+	bool bRequireUserConsent;
+
+	UPROPERTY(Config, EditAnywhere, Category = "General|Consent",
+		Meta = (DisplayName = "Default User Consent Given (for Windows/Linux only)", ToolTip = "True if the default user consent value is 'given'; false if the default value should be 'revoked'. Currently this feature is supported for Windows and Linux only.", EditCondition = "bRequireUserConsent"))
+	bool bDefaultUserConsentGiven;
+
 #if WITH_EDITOR
 	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
 #endif
@@ -376,17 +441,46 @@ class SENTRY_API USentrySettings : public UObject
 	 * Gets the effective DSN based on current execution context.
 	 *
 	 * @return Editor DSN when running in the editor and one is set; otherwise, falls back to the default DSN.
+	 * If neither is provided, the SDK will attempt to read it from the SENTRY_DSN environment variable.
 	 */
 	FString GetEffectiveDsn() const;
 
-	static FString GetFormattedReleaseName();
+	/**
+	 * Gets the effective environment based on current execution context.
+	 *
+	 * @return By default, the SDK uses the `Environment` value from the plugin settings if set.
+	 * If not, the SDK will attempt to read it from SENTRY_ENVIRONMENT environment variable.
+	 * If that is also not set, the environment is automatically derived from the current build configuration.
+	 */
+	FString GetEffectiveEnvironment() const;
+
+	/**
+	 * Gets the environment from the application's build configuration.
+	 *
+	 * @return Environment string based on build configuration (`Shipping` maps to `Release`, others map directly).
+	 */
+	FString GetEnvironmentFromBuildConfig() const;
+
+	/**
+	 * Gets the effective release name based on current execution context.
+	 *
+	 * @return By default, the SDK uses the `Release` value from the plugin settings if `OverrideReleaseName` flag is set.
+	 * If not, the SDK will attempt to read it from SENTRY_RELEASE environment variable.
+	 * If that is also not set, the release name is automatically derived from the current project name and version.
+	 */
+	FString GetEffectiveRelease() const;
+
+	/**
+	 * Gets the release name from the project settings.
+	 *
+	 * @return Release name derived from the current project name and version to match the format `<ProjectName>@<Version>`.
+	 */
+	FString GetReleaseFromProjectSettings() const;
 
 	bool IsDirty() const;
 	void ClearDirtyFlag();
 
 private:
-	FString GetDefaultEnvironmentName();
-
 	void LoadDebugSymbolsProperties();
 
 	bool bIsDirty;

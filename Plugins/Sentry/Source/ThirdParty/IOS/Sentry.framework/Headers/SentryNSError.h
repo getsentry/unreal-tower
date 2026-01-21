@@ -14,6 +14,7 @@ NS_ASSUME_NONNULL_BEGIN
  * Sentry representation of an @c NSError to send to Sentry.
  */
 @interface SentryNSError : NSObject <SentrySerializable>
+
 SENTRY_NO_INIT
 
 /**

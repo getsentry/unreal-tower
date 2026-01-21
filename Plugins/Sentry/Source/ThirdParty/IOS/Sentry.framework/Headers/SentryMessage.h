@@ -16,6 +16,7 @@ NS_ASSUME_NONNULL_BEGIN
  * @see https://develop.sentry.dev/sdk/event-payloads/message/
  */
 @interface SentryMessage : NSObject <SentrySerializable>
+
 SENTRY_NO_INIT
 
 /**

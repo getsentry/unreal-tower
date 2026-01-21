@@ -4,12 +4,6 @@
 #    import "PrivatesHeader.h"
 #endif
 
-#if __has_include(<Sentry/SentryScreenFrames.h>)
-#    import <Sentry/SentryScreenFrames.h>
-#else
-#    import "SentryScreenFrames.h"
-#endif
-
 @class SentryDebugMeta;
 @class SentryScreenFrames;
 @class SentryAppStartMeasurement;
@@ -55,24 +49,6 @@ typedef void (^SentryOnAppStartMeasurementAvailable)(
  * Create an envelope from @c NSData. Needed for example by Flutter.
  */
 + (nullable SentryEnvelope *)envelopeWithData:(NSData *)data;
-
-/**
- * Returns the current list of debug images. Be aware that the @c SentryDebugMeta is actually
- * describing a debug image.
- * @warning This assumes a crash has occurred and attempts to read the crash information from each
- * image's data segment, which may not be present or be invalid if a crash has not actually
- * occurred. To avoid this, use the new @c +[getDebugImagesCrashed:] instead.
- */
-+ (NSArray<SentryDebugMeta *> *)getDebugImages;
-
-/**
- * Returns the current list of debug images. Be aware that the @c SentryDebugMeta is actually
- * describing a debug image.
- * @param isCrash @c YES if we're collecting binary images for a crash report, @c NO if we're
- * gathering them for other backtrace information, like a performance transaction. If this is for a
- * crash, each image's data section crash info is also included.
- */
-+ (NSArray<SentryDebugMeta *> *)getDebugImagesCrashed:(BOOL)isCrash;
 
 /**
  * Override SDK information.
@@ -175,18 +151,18 @@ typedef void (^SentryOnAppStartMeasurementAvailable)(
  * @warning This feature is not available in @c DebugWithoutUIKit and @c ReleaseWithoutUIKit
  * configurations even when targeting iOS or tvOS platforms.
  */
-+ (NSArray<NSData *> *)captureScreenshots;
++ (NSArray<NSData *> *_Nullable)captureScreenshots;
 
 /**
  * @warning This feature is not available in @c DebugWithoutUIKit and @c ReleaseWithoutUIKit
  * configurations even when targeting iOS or tvOS platforms.
  */
-+ (NSData *)captureViewHierarchy;
++ (NSData *_Nullable)captureViewHierarchy;
 
 /**
  * Allow Hybrids SDKs to set the current Screen.
  */
-+ (void)setCurrentScreen:(NSString *)screenName;
++ (void)setCurrentScreen:(NSString *_Nullable)screenName;
 
 #endif // SENTRY_UIKIT_AVAILABLE
 

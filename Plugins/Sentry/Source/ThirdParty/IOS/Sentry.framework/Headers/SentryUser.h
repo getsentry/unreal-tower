@@ -35,13 +35,6 @@ NS_SWIFT_NAME(User)
 @property (atomic, copy) NSString *_Nullable ipAddress;
 
 /**
- * The user segment, for apps that divide users in user segments.
- * @deprecated This field will be removed in the next major version.
- */
-@property (atomic, copy) NSString *_Nullable segment DEPRECATED_MSG_ATTRIBUTE(
-    "This field is deprecated and will be removed in the next major update.");
-
-/**
  * Optional: Human readable name
  */
 @property (atomic, copy) NSString *_Nullable name;

@@ -41,11 +41,6 @@ NS_SWIFT_NAME(Baggage)
 @property (nullable, nonatomic, readonly) NSString *userId;
 
 /**
- * The value of a segment attribute in the user's data bag, if it exists.
- */
-@property (nullable, nonatomic, readonly) NSString *userSegment;
-
-/**
  * The random value used to determine if the trace is sampled.
  *
  * A float (`0.1234` notation) in the range of `[0, 1)` (including 0.0, excluding 1.0).
@@ -69,7 +64,6 @@ NS_SWIFT_NAME(Baggage)
                     releaseName:(nullable NSString *)releaseName
                     environment:(nullable NSString *)environment
                     transaction:(nullable NSString *)transaction
-                    userSegment:(nullable NSString *)userSegment
                      sampleRate:(nullable NSString *)sampleRate
                         sampled:(nullable NSString *)sampled
                        replayId:(nullable NSString *)replayId;
@@ -79,7 +73,6 @@ NS_SWIFT_NAME(Baggage)
                     releaseName:(nullable NSString *)releaseName
                     environment:(nullable NSString *)environment
                     transaction:(nullable NSString *)transaction
-                    userSegment:(nullable NSString *)userSegment
                      sampleRate:(nullable NSString *)sampleRate
                      sampleRand:(nullable NSString *)sampleRand
                         sampled:(nullable NSString *)sampled

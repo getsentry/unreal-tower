@@ -61,7 +61,7 @@ public class Sentry : ModuleRules
 			PublicDefinitions.Add("SENTRY_NO_UIKIT=0");
 			PublicDefinitions.Add("APPLICATION_EXTENSION_API_ONLY_NO=0");
 			PublicDefinitions.Add("SDK_V9=0");
-			PublicDefinitions.Add("SDK_v9=0");
+			PublicDefinitions.Add("SWIFT_PACKAGE=0");
 		}
 		else if (Target.Platform == UnrealTargetPlatform.Mac)
 		{
@@ -76,7 +76,7 @@ public class Sentry : ModuleRules
 			PublicDefinitions.Add("SENTRY_NO_UIKIT=1");
 			PublicDefinitions.Add("APPLICATION_EXTENSION_API_ONLY_NO=0");
 			PublicDefinitions.Add("SDK_V9=0");
-			PublicDefinitions.Add("SDK_v9=0");
+			PublicDefinitions.Add("SWIFT_PACKAGE=0");
 		}
 		else if (Target.Platform == UnrealTargetPlatform.Android)
 		{
@@ -94,33 +94,24 @@ public class Sentry : ModuleRules
 		{
 			PrivateIncludePaths.Add(Path.Combine(ModuleDirectory, "Private", "Microsoft"));
 
-			bool CrashpadExists = File.Exists(Path.Combine(PlatformThirdPartyPath, "Crashpad", "bin", "crashpad_handler.exe"));
+			PublicIncludePaths.Add(Path.Combine(PlatformThirdPartyPath, "include"));
 
-			string WindowsThirdPartyPath = Path.Combine(PlatformThirdPartyPath, CrashpadExists ? "Crashpad" : "Breakpad");
+			PublicAdditionalLibraries.Add(Path.Combine(PlatformThirdPartyPath, "lib", "sentry.lib"));
 
-			PublicIncludePaths.Add(Path.Combine(WindowsThirdPartyPath, "include"));
 
-			PublicAdditionalLibraries.Add(Path.Combine(WindowsThirdPartyPath, "lib", "sentry.lib"));
+			RuntimeDependencies.Add(Path.Combine(PlatformBinariesPath, "crashpad_handler.exe"), Path.Combine(PlatformThirdPartyPath, "bin", "crashpad_handler.exe"));
+			RuntimeDependencies.Add(Path.Combine(PlatformBinariesPath, "crashpad_wer.dll"), Path.Combine(PlatformThirdPartyPath, "bin", "crashpad_wer.dll"));
 
-			if (CrashpadExists)
-			{
-				RuntimeDependencies.Add(Path.Combine(PlatformBinariesPath, "crashpad_handler.exe"), Path.Combine(WindowsThirdPartyPath, "bin", "crashpad_handler.exe"));
-				RuntimeDependencies.Add(Path.Combine(PlatformBinariesPath, "crashpad_wer.dll"), Path.Combine(WindowsThirdPartyPath, "bin", "crashpad_wer.dll"));
-
-				PublicAdditionalLibraries.Add(Path.Combine(WindowsThirdPartyPath, "lib", "crashpad_compat.lib"));
-				PublicAdditionalLibraries.Add(Path.Combine(WindowsThirdPartyPath, "lib", "crashpad_snapshot.lib"));
-				PublicAdditionalLibraries.Add(Path.Combine(WindowsThirdPartyPath, "lib", "crashpad_util.lib"));
-				PublicAdditionalLibraries.Add(Path.Combine(WindowsThirdPartyPath, "lib", "mini_chromium.lib"));
-				PublicAdditionalLibraries.Add(Path.Combine(WindowsThirdPartyPath, "lib", "crashpad_client.lib"));
-				PublicAdditionalLibraries.Add(Path.Combine(WindowsThirdPartyPath, "lib", "crashpad_zlib.lib"));
-				PublicAdditionalLibraries.Add(Path.Combine(WindowsThirdPartyPath, "lib", "crashpad_getopt.lib"));
-				PublicAdditionalLibraries.Add(Path.Combine(WindowsThirdPartyPath, "lib", "crashpad_tools.lib"));
-				PublicAdditionalLibraries.Add(Path.Combine(WindowsThirdPartyPath, "lib", "crashpad_handler_lib.lib"));
-			}
-			else
-			{
-				PublicAdditionalLibraries.Add(Path.Combine(WindowsThirdPartyPath, "lib", "breakpad_client.lib"));
-			}
+			PublicAdditionalLibraries.Add(Path.Combine(PlatformThirdPartyPath, "lib", "crashpad_compat.lib"));
+			PublicAdditionalLibraries.Add(Path.Combine(PlatformThirdPartyPath, "lib", "crashpad_snapshot.lib"));
+			PublicAdditionalLibraries.Add(Path.Combine(PlatformThirdPartyPath, "lib", "crashpad_util.lib"));
+			PublicAdditionalLibraries.Add(Path.Combine(PlatformThirdPartyPath, "lib", "mini_chromium.lib"));
+			PublicAdditionalLibraries.Add(Path.Combine(PlatformThirdPartyPath, "lib", "crashpad_client.lib"));
+			PublicAdditionalLibraries.Add(Path.Combine(PlatformThirdPartyPath, "lib", "crashpad_zlib.lib"));
+			PublicAdditionalLibraries.Add(Path.Combine(PlatformThirdPartyPath, "lib", "crashpad_getopt.lib"));
+			PublicAdditionalLibraries.Add(Path.Combine(PlatformThirdPartyPath, "lib", "crashpad_tools.lib"));
+			PublicAdditionalLibraries.Add(Path.Combine(PlatformThirdPartyPath, "lib", "crashpad_handler_lib.lib"));
+			PublicAdditionalLibraries.Add(Path.Combine(PlatformThirdPartyPath, "lib", "crashpad_mpack.lib"));
 
 			PublicDefinitions.Add("USE_SENTRY_NATIVE=1");
 			PublicDefinitions.Add("SENTRY_BUILD_STATIC=1");
@@ -149,6 +140,7 @@ public class Sentry : ModuleRules
 			PublicAdditionalLibraries.Add(Path.Combine(PlatformThirdPartyPath, "lib", "libcrashpad_util.a"));
 			PublicAdditionalLibraries.Add(Path.Combine(PlatformThirdPartyPath, "lib", "libmini_chromium.a"));
 			PublicAdditionalLibraries.Add(Path.Combine(PlatformThirdPartyPath, "lib", "libsentry.a"));
+			PublicAdditionalLibraries.Add(Path.Combine(PlatformThirdPartyPath, "lib", "libcrashpad_mpack.a"));
 
 			PublicDefinitions.Add("USE_SENTRY_NATIVE=1");
 			PublicDefinitions.Add("SENTRY_BUILD_STATIC=1");

@@ -11,6 +11,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -32,13 +33,21 @@ import io.sentry.exception.ExceptionMechanismException;
 import io.sentry.protocol.Mechanism;
 import io.sentry.protocol.SentryException;
 import io.sentry.protocol.SentryId;
+import io.sentry.SentryAttributeType;
+import io.sentry.SentryAttributes;
+import io.sentry.SentryLogEvent;
+import io.sentry.SentryLogEventAttributeValue;
+import io.sentry.logger.SentryLogParameters;
+import io.sentry.SentryLogLevel;
 
 public class SentryBridgeJava {
 	public static native void onConfigureScope(long callbackAddr, IScope scope);
 	public static native SentryEvent onBeforeSend(long handlerAddr, SentryEvent event, Hint hint);
 	public static native Breadcrumb onBeforeBreadcrumb(long handlerAddr, Breadcrumb breadcrumb, Hint hint);
+	public static native SentryLogEvent onBeforeLog(long handlerAddr, SentryLogEvent logEvent);
 	public static native float onTracesSampler(long samplerAddr, SamplingContext samplingContext);
 	public static native String getLogFilePath(boolean isCrash);
+	public static native String getScreenshotFilePath();
 
 	public static void init(Activity activity, final String settingsJsonStr) {
 		SentryAndroid.init(activity, new Sentry.OptionsConfiguration<SentryAndroidOptions>() {
@@ -56,7 +65,6 @@ public class SentryBridgeJava {
 					options.setDebug(settingJson.getBoolean("debug"));
 					options.setSampleRate(settingJson.getDouble("sampleRate"));
 					options.setMaxBreadcrumbs(settingJson.getInt("maxBreadcrumbs"));
-					options.setAttachScreenshot(settingJson.getBoolean("attachScreenshot"));
 					options.setSendDefaultPii(settingJson.getBoolean("sendDefaultPii"));
 					JSONArray Includes = settingJson.getJSONArray("inAppInclude");
 					for (int i = 0; i < Includes.length(); i++) {
@@ -67,6 +75,7 @@ public class SentryBridgeJava {
 						options.addInAppExclude(Excludes.getString(i));
 					}
 					options.setAnrEnabled(settingJson.getBoolean("enableAnrTracking"));
+					options.getLogs().setEnabled(settingJson.getBoolean("enableStructuredLogging"));
 					if(settingJson.has("tracesSampleRate")) {
 						options.setTracesSampleRate(settingJson.getDouble("tracesSampleRate"));
 					}
@@ -93,11 +102,17 @@ public class SentryBridgeJava {
 							}
 						});
 					}
-                    if (settingJson.has("beforeSendHandler")) {
-						options.setBeforeSend(new SentryUnrealBeforeSendCallback(settingJson.getBoolean("enableAutoLogAttachment"), settingJson.getLong("beforeSendHandler")));
+					if (settingJson.has("beforeSendHandler")) {
+						options.setBeforeSend(new SentryUnrealBeforeSendCallback(
+								settingJson.getBoolean("enableAutoLogAttachment"), settingJson.getBoolean("attachScreenshot"), settingJson.getLong("beforeSendHandler")));
 					}
-                    else {
-						options.setBeforeSend(new SentryUnrealBeforeSendCallback(settingJson.getBoolean("enableAutoLogAttachment")));
+					else {
+						options.setBeforeSend(new SentryUnrealBeforeSendCallback(
+								settingJson.getBoolean("enableAutoLogAttachment"), settingJson.getBoolean("attachScreenshot")));
+					}
+
+					if (settingJson.has("beforeLogHandler")) {
+						options.getLogs().setBeforeSend(new SentryUnrealBeforeLogCallback(settingJson.getLong("beforeLogHandler")));
 					}
 				} catch (JSONException e) {
 					throw new RuntimeException(e);
@@ -140,13 +155,19 @@ public class SentryBridgeJava {
 		return eventId;
 	}
 
-	public static SentryId captureException(final String type, final String value) {
+	public static SentryId captureException(final String type, final String value, final Attachment screenshotAttachment) {
 		SentryException exception = new SentryException();
 		exception.setType(type);
 		exception.setValue(value);
 		SentryEvent event = new SentryEvent();
 		event.setExceptions(Collections.singletonList(exception));
-		SentryId eventId = Sentry.captureEvent(event);
+
+		Hint hint = new Hint();
+		if (screenshotAttachment != null) {
+			hint.addAttachment(screenshotAttachment);
+		}
+
+		SentryId eventId = Sentry.captureEvent(event, hint);
 		return eventId;
 	}
 
@@ -241,32 +262,190 @@ public class SentryBridgeJava {
 		Sentry.getGlobalScope().clearAttachments();
 	}
 
+	public static void addLogFatal(final String message, final HashMap<String, Object> attributesMap) {
+		addLog(SentryLogLevel.FATAL, message, attributesMap);
+	}
+
+	public static void addLogError(final String message, final HashMap<String, Object> attributesMap) {
+		addLog(SentryLogLevel.ERROR, message, attributesMap);
+	}
+
+	public static void addLogWarn(final String message, final HashMap<String, Object> attributesMap) {
+		addLog(SentryLogLevel.WARN, message, attributesMap);
+	}
+
+	public static void addLogInfo(final String message, final HashMap<String, Object> attributesMap) {
+		addLog(SentryLogLevel.INFO, message, attributesMap);
+	}
+
+	public static void addLogDebug(final String message, final HashMap<String, Object> attributesMap) {
+		addLog(SentryLogLevel.DEBUG, message, attributesMap);
+	}
+
+	private static void addLog(final SentryLogLevel level, final String message, final HashMap<String, Object> attributesMap) {
+		if (attributesMap != null && !attributesMap.isEmpty()) {
+			SentryAttributes attributes = SentryAttributes.fromMap(attributesMap);
+			SentryLogParameters params = SentryLogParameters.create(attributes);
+			Sentry.logger().log(level, params, message);
+		} else {
+			Sentry.logger().log(level, message);
+		}
+	}
+
+	public static void setLogAttribute(final SentryLogEvent logEvent, final String key, final Object value) {
+		if (logEvent == null || key == null || value == null) {
+			return;
+		}
+
+		SentryLogEventAttributeValue attributeValue;
+
+		if (value instanceof String) {
+			attributeValue = new SentryLogEventAttributeValue(SentryAttributeType.STRING, value);
+		} else if (value instanceof Integer) {
+			attributeValue = new SentryLogEventAttributeValue(SentryAttributeType.INTEGER, value);
+		} else if (value instanceof Boolean) {
+			attributeValue = new SentryLogEventAttributeValue(SentryAttributeType.BOOLEAN, value);
+		} else if (value instanceof Float) {
+            // Unreal's variant doesn't support Double so manual conversion is required
+			attributeValue = new SentryLogEventAttributeValue(SentryAttributeType.DOUBLE, ((Float) value).doubleValue());
+		} else {
+			// Unsupported type (e.g. ArrayList, HashMap) - convert to JSON string for consistency with other platforms
+			String jsonString;
+			if (value instanceof java.util.List) {
+				jsonString = new JSONArray((java.util.List<?>) value).toString();
+			} else if (value instanceof java.util.Map) {
+				jsonString = new JSONObject((java.util.Map<?, ?>) value).toString();
+			} else {
+				jsonString = value.toString();
+			}
+			attributeValue = new SentryLogEventAttributeValue(SentryAttributeType.STRING, jsonString);
+		}
+
+		logEvent.setAttribute(key, attributeValue);
+	}
+
+	public static Object getLogAttribute(final SentryLogEvent logEvent, final String key) {
+		if (logEvent == null || key == null) {
+			return null;
+		}
+
+		Map<String, SentryLogEventAttributeValue> attributes = logEvent.getAttributes();
+		if (attributes == null) {
+			return null;
+		}
+
+		SentryLogEventAttributeValue attributeValue = attributes.get(key);
+		if (attributeValue == null) {
+			return null;
+		}
+
+        Object value = attributeValue.getValue();
+
+        if (value instanceof Double) {
+            // Unreal's variant doesn't support Double so manual conversion is required
+            return ((Double) attributeValue.getValue()).floatValue();
+        }
+
+		return value;
+	}
+
+	public static void removeLogAttribute(final SentryLogEvent logEvent, final String key) {
+		if (logEvent == null || key == null) {
+			return;
+		}
+
+		Map<String, SentryLogEventAttributeValue> attributes = logEvent.getAttributes();
+		if (attributes != null) {
+			attributes.remove(key);
+		}
+	}
+
 	private static class SentryUnrealBeforeSendCallback implements SentryOptions.BeforeSendCallback {
 		private final boolean attachLog;
+		private final boolean attachScreenshot;
 		private final long beforeSendAddr;
 
-		public SentryUnrealBeforeSendCallback(boolean attachLog) {
+		public SentryUnrealBeforeSendCallback(boolean attachLog, boolean attachScreenshot) {
 			this.attachLog = attachLog;
+			this.attachScreenshot = attachScreenshot;
 			this.beforeSendAddr = 0;
 		}
 
-		public SentryUnrealBeforeSendCallback(boolean attachLog, long beforeSendAddr) {
+		public SentryUnrealBeforeSendCallback(boolean attachLog, boolean attachScreenshot, long beforeSendAddr) {
 			this.attachLog = attachLog;
+			this.attachScreenshot = attachScreenshot;
 			this.beforeSendAddr = beforeSendAddr;
 		}
 
 		@Override
 		public SentryEvent execute(SentryEvent event, Hint hint) {
-			if(attachLog) {
+			SentryOptions options = getOptions();
+
+			if (attachLog) {
 				String logFilePath = getLogFilePath(event.isCrashed());
-				if(!logFilePath.isEmpty()) {
+				if (!logFilePath.isEmpty()) {
 					hint.addAttachment(new Attachment(logFilePath, new File(logFilePath).getName(), "text/plain"));
 				}
 			}
-            if (beforeSendAddr != 0) {
+
+			if (attachScreenshot && event.isCrashed()) {
+				String screenshotFilePath = getScreenshotFilePath();
+				if (!screenshotFilePath.isEmpty()) {
+					try {
+						File screenshotFile = new File(screenshotFilePath);
+						if (screenshotFile.exists()) {
+							byte[] screenshotBytes = readFileToBytes(screenshotFile);
+							hint.addAttachment(new Attachment(screenshotBytes, "screenshot.png", "image/png"));
+							if (!screenshotFile.delete()) {
+								options.getLogger().log(SentryLevel.WARNING, "Failed to delete screenshot: %s", screenshotFilePath);
+							}
+						}
+					} catch (Exception e) {
+						options.getLogger().log(SentryLevel.ERROR, "Failed to process screenshot", e);
+					}
+				}
+			}
+
+			if (beforeSendAddr != 0) {
 				return onBeforeSend(beforeSendAddr, event, hint);
 			}
-            return event;
-        }
+			return event;
+		}
+	}
+
+	private static class SentryUnrealBeforeLogCallback implements SentryOptions.Logs.BeforeSendLogCallback {
+		private final long beforeLogAddr;
+
+		public SentryUnrealBeforeLogCallback(long beforeLogAddr) {
+			this.beforeLogAddr = beforeLogAddr;
+		}
+
+		@Override
+		public SentryLogEvent execute(SentryLogEvent logEvent) {
+			if (beforeLogAddr != 0) {
+				return onBeforeLog(beforeLogAddr, logEvent);
+			}
+			return logEvent;
+		}
+	}
+
+	private static byte[] readFileToBytes(File file) throws Exception {
+		FileInputStream fis = new FileInputStream(file);
+		try {
+			byte[] buffer = new byte[(int) file.length()];
+			int offset = 0;
+			int remaining = buffer.length;
+			while (remaining > 0) {
+				int bytesRead = fis.read(buffer, offset, remaining);
+				if (bytesRead < 0) {
+					throw new Exception("Unexpected end of file while reading: " + file.getAbsolutePath());
+				}
+				offset += bytesRead;
+				remaining -= bytesRead;
+			}
+			return buffer;
+		} finally {
+			fis.close();
+		}
 	}
 }

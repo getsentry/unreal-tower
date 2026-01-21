@@ -14,7 +14,8 @@ USentrySettings::USentrySettings(const FObjectInitializer& ObjectInitializer)
 	, InitAutomatically(true)
 	, Dsn()
 	, Debug(true)
-	, Environment(GetDefaultEnvironmentName())
+	, Environment()
+	, Dist()
 	, SampleRate(1.0f)
 	, EnableAutoLogAttachment(false)
 	, AttachStacktrace(true)
@@ -22,29 +23,49 @@ USentrySettings::USentrySettings(const FObjectInitializer& ObjectInitializer)
 	, AttachScreenshot(false)
 	, AttachGpuDump(true)
 	, MaxAttachmentSize(20 * 1024 * 1024)
+	, EnableStructuredLogging(false)
+	, StructuredLoggingCategories()
+	, StructuredLoggingLevels()
+	, bSendBreadcrumbsWithStructuredLogging(false)
 	, MaxBreadcrumbs(100)
+	, AutomaticBreadcrumbs()
+	, AutomaticBreadcrumbsForLogs()
 	, EnableAutoSessionTracking(true)
 	, SessionTimeout(30000)
 	, OverrideReleaseName(false)
+	, Release()
 	, UseProxy(false)
 	, ProxyUrl()
 	, BeforeSendHandler(nullptr)
 	, BeforeBreadcrumbHandler(nullptr)
+	, BeforeLogHandler(nullptr)
 	, EnableAutoCrashCapturing(true)
 	, DatabaseLocation(ESentryDatabaseLocation::ProjectUserDirectory)
 	, CrashpadWaitForUpload(false)
+	, EnableOnCrashLogging(false)
+	, InAppInclude()
+	, InAppExclude()
 	, EnableAppNotRespondingTracking(false)
 	, EnableTracing(false)
 	, SamplingType(ESentryTracesSamplingType::UniformSampleRate)
 	, TracesSampleRate(0.0f)
 	, TracesSampler(nullptr)
 	, EditorDsn()
+	, TagsPromotion()
+	, EnableBuildConfigurations()
+	, EnableBuildTargets()
 	, EnableForPromotedBuildsOnly(false)
 	, UploadSymbolsAutomatically(false)
+	, ProjectName()
+	, OrgName()
+	, AuthToken()
 	, IncludeSources(false)
 	, DiagnosticLevel(ESentryCliLogLevel::Info)
 	, UseLegacyGradlePlugin(false)
 	, CrashReporterUrl()
+	, EnableCrashReporterContextPropagation(true)
+	, bRequireUserConsent(false)
+	, bDefaultUserConsentGiven(true)
 	, bIsDirty(false)
 {
 	if (GIsEditor)
@@ -72,7 +93,8 @@ void USentrySettings::PostEditChangeProperty(FPropertyChangedEvent& PropertyChan
 		PropertyChangedEvent.Property->GetFName() == GET_MEMBER_NAME_CHECKED(USentrySettings, IncludeSources) ||
 		PropertyChangedEvent.Property->GetFName() == GET_MEMBER_NAME_CHECKED(USentrySettings, UseLegacyGradlePlugin) ||
 		PropertyChangedEvent.Property->GetFName() == GET_MEMBER_NAME_CHECKED(USentrySettings, DiagnosticLevel) ||
-		PropertyChangedEvent.Property->GetFName() == GET_MEMBER_NAME_CHECKED(USentrySettings, CrashReporterUrl))
+		PropertyChangedEvent.Property->GetFName() == GET_MEMBER_NAME_CHECKED(USentrySettings, CrashReporterUrl) ||
+		PropertyChangedEvent.Property->GetFName() == GET_MEMBER_NAME_CHECKED(USentrySettings, EnableCrashReporterContextPropagation))
 	{
 		return;
 	}
@@ -84,10 +106,82 @@ void USentrySettings::PostEditChangeProperty(FPropertyChangedEvent& PropertyChan
 
 FString USentrySettings::GetEffectiveDsn() const
 {
-	return GIsEditor && !EditorDsn.IsEmpty() ? EditorDsn : Dsn;
+	if (GIsEditor && !EditorDsn.IsEmpty())
+	{
+		return EditorDsn;
+	}
+
+	if (!Dsn.IsEmpty())
+	{
+		return Dsn;
+	}
+
+	const FString& EnvVarDsn = FPlatformMisc::GetEnvironmentVariable(TEXT("SENTRY_DSN"));
+	if (!EnvVarDsn.IsEmpty())
+	{
+		UE_LOG(LogSentrySdk, Log, TEXT("DSN is not set in plugin settings - using SENTRY_DSN environment variable instead."));
+		return EnvVarDsn;
+	}
+
+	UE_LOG(LogSentrySdk, Log, TEXT("DSN is not configured."));
+	return FString();
 }
 
-FString USentrySettings::GetFormattedReleaseName()
+FString USentrySettings::GetEffectiveEnvironment() const
+{
+	if (!Environment.IsEmpty())
+	{
+		UE_LOG(LogSentrySdk, Verbose, TEXT("Using the value from plugin settings as Sentry environment."));
+		return Environment;
+	}
+
+	const FString& EnvVarEnvironment = FPlatformMisc::GetEnvironmentVariable(TEXT("SENTRY_ENVIRONMENT"));
+	if (!EnvVarEnvironment.IsEmpty())
+	{
+		UE_LOG(LogSentrySdk, Log, TEXT("Using SENTRY_ENVIRONMENT variable as Sentry environment."));
+		return EnvVarEnvironment;
+	}
+
+	UE_LOG(LogSentrySdk, Log, TEXT("Using current build configuration as Sentry environment."));
+	return GetEnvironmentFromBuildConfig();
+}
+
+FString USentrySettings::GetEnvironmentFromBuildConfig() const
+{
+	if (GIsEditor)
+	{
+		return TEXT("Editor");
+	}
+
+	// Check Shipping configuration separately for backward compatibility
+	if (FApp::GetBuildConfiguration() == EBuildConfiguration::Shipping)
+	{
+		return TEXT("Release");
+	}
+
+	return LexToString(FApp::GetBuildConfiguration());
+}
+
+FString USentrySettings::GetEffectiveRelease() const
+{
+	if (OverrideReleaseName)
+	{
+		UE_LOG(LogSentrySdk, Verbose, TEXT("Using the value from plugin settings as Sentry release."));
+		return Release;
+	}
+
+	const FString& EnvVarRelease = FPlatformMisc::GetEnvironmentVariable(TEXT("SENTRY_RELEASE"));
+	if (!EnvVarRelease.IsEmpty())
+	{
+		UE_LOG(LogSentrySdk, Log, TEXT("Using SENTRY_RELEASE variable as Sentry release."));
+		return EnvVarRelease;
+	}
+
+	UE_LOG(LogSentrySdk, Log, TEXT("Using current project name and version as Sentry release."));
+	return GetReleaseFromProjectSettings();
+}
+
+FString USentrySettings::GetReleaseFromProjectSettings() const
 {
 	FString FormattedReleaseName = FApp::GetProjectName();
 
@@ -109,22 +203,6 @@ bool USentrySettings::IsDirty() const
 void USentrySettings::ClearDirtyFlag()
 {
 	bIsDirty = false;
-}
-
-FString USentrySettings::GetDefaultEnvironmentName()
-{
-	if (GIsEditor)
-	{
-		return TEXT("Editor");
-	}
-
-	// Check Shipping configuration separately for backward compatibility
-	if (FApp::GetBuildConfiguration() == EBuildConfiguration::Shipping)
-	{
-		return TEXT("Release");
-	}
-
-	return LexToString(FApp::GetBuildConfiguration());
 }
 
 void USentrySettings::LoadDebugSymbolsProperties()
