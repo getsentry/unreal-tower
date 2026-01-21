@@ -1,8 +1,8 @@
 name: run-demo
 
 on:
-  # schedule:
-  #   - cron: '0 */2 * * *' # every two hours
+  schedule:
+    - cron: '*/50 * * * *' # every 50 minutes
   workflow_dispatch:
 
 jobs:
@@ -28,6 +28,8 @@ jobs:
           run-id: ${{ steps.get-run.outputs.run-id }}
 
       - name: Run Simulation
+        env:
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: |
           $downloadPath = "${{ steps.download.outputs.download-path }}"
           Write-Output "Download path: $downloadPath"
