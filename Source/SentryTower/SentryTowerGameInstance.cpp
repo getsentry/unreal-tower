@@ -2,6 +2,7 @@
 
 #include "SentryTowerGameInstance.h"
 
+#include "Containers/Ticker.h"
 #include "HttpModule.h"
 #include "SentryLibrary.h"
 #include "SentrySettings.h"
@@ -14,6 +15,27 @@
 void USentryTowerGameInstance::Init()
 {
 	Super::Init();
+
+	if (FParse::Param(FCommandLine::Get(), TEXT("upload-only")))
+	{
+		// For upload-only mode (second run after crash on platform with in-proc crash handler, e.g. Xbox) exit after Sentry initializes
+		// Short delay allows pending crash reports to be uploaded before shutdown
+		FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([](float DeltaTime) -> bool
+		{
+			static float ElapsedTime = 0.0f;
+			ElapsedTime += DeltaTime;
+
+			if (ElapsedTime >= 3.0f)
+			{
+				FPlatformMisc::RequestExit(false);
+				return false;
+			}
+
+			return true;
+		}));
+
+		return;
+	}
 
 	if (FParse::Param(FCommandLine::Get(), TEXT("NullRHI")))
 	{
