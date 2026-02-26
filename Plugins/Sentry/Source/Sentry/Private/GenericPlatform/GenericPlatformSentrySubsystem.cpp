@@ -241,7 +241,15 @@ sentry_value_t FGenericPlatformSentrySubsystem::OnBeforeMetric(sentry_value_t me
 
 	USentryMetric* ProcessedMetricData = Handler->HandleBeforeMetric(MetricData);
 
-	return ProcessedMetricData ? metric : sentry_value_new_null();
+	if (ProcessedMetricData)
+	{
+		return metric;
+	}
+	else
+	{
+		sentry_value_decref(metric);
+		return sentry_value_new_null();
+	}
 }
 
 sentry_value_t FGenericPlatformSentrySubsystem::OnCrash(const sentry_ucontext_t* uctx, sentry_value_t event, void* closure)
