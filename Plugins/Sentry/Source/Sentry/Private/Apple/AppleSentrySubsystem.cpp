@@ -41,8 +41,14 @@
 #include "UObject/GarbageCollection.h"
 #include "UObject/UObjectThreadContext.h"
 
-void FAppleSentrySubsystem::InitWithSettings(const USentrySettings* settings, USentryBeforeSendHandler* beforeSendHandler, USentryBeforeBreadcrumbHandler* beforeBreadcrumbHandler, USentryBeforeLogHandler* beforeLogHandler, USentryTraceSampler* traceSampler)
+void FAppleSentrySubsystem::InitWithSettings(const USentrySettings* settings, const FSentryCallbackHandlers& callbackHandlers)
 {
+	USentryBeforeSendHandler* beforeSendHandler = callbackHandlers.BeforeSendHandler;
+	USentryBeforeBreadcrumbHandler* beforeBreadcrumbHandler = callbackHandlers.BeforeBreadcrumbHandler;
+	USentryBeforeLogHandler* beforeLogHandler = callbackHandlers.BeforeLogHandler;
+	USentryBeforeMetricHandler* beforeMetricHandler = callbackHandlers.BeforeMetricHandler;
+	USentryTraceSampler* traceSampler = callbackHandlers.TraceSampler;
+
 	isScreenshotAttachmentEnabled = settings->AttachScreenshot;
 	isGameLogAttachmentEnabled = settings->EnableAutoLogAttachment;
 
@@ -65,6 +71,7 @@ void FAppleSentrySubsystem::InitWithSettings(const USentrySettings* settings, US
 			options.sendDefaultPii = settings->SendDefaultPii;
 			options.maxAttachmentSize = settings->MaxAttachmentSize;
 			options.enableLogs = settings->EnableStructuredLogging;
+			options.experimental.enableMetrics = settings->EnableMetrics;
 #if SENTRY_UIKIT_AVAILABLE
 			options.attachScreenshot = settings->AttachScreenshot;
 #endif
@@ -87,6 +94,10 @@ void FAppleSentrySubsystem::InitWithSettings(const USentrySettings* settings, US
 				[options addInAppInclude:it->GetNSString()];
 			}
 			options.enableAppHangTracking = settings->EnableAppNotRespondingTracking;
+			if (settings->EnableOfflineCaching)
+			{
+				options.maxCacheItems = settings->CacheMaxItems;
+			}
 			if (settings->EnableTracing && settings->SamplingType == ESentryTracesSamplingType::UniformSampleRate)
 			{
 				options.tracesSampleRate = [NSNumber numberWithFloat:settings->TracesSampleRate];
@@ -232,6 +243,65 @@ void FAppleSentrySubsystem::AddLog(const FString& Message, ESentryLevel Level, c
 		[[SENTRY_APPLE_CLASS(SentrySDK) logger] debug:Message.GetNSString() attributes:attributesDict];
 		break;
 	}
+}
+
+void FAppleSentrySubsystem::AddCount(const FString& Key, int32 Value, const TMap<FString, FSentryVariant>& Attributes)
+{
+	// Expected API once sentry-cocoa adds ObjC metrics bridge:
+
+	// NSMutableDictionary* attributesDict = [NSMutableDictionary dictionaryWithCapacity:Attributes.Num()];
+	// for (const auto& pair : Attributes)
+	// {
+	// 	SentryAttribute* attribute = FAppleSentryConverters::VariantToAttributeNative(pair.Value);
+	// 	if (attribute != nil)
+	// 	{
+	// 		[attributesDict setObject:attribute.value forKey:pair.Key.GetNSString()];
+	// 	}
+	// }
+	//
+	// [[SENTRY_APPLE_CLASS(SentrySDK) metrics] countWithKey:Key.GetNSString() value:(NSUInteger)Value attributes:attributesDict];
+
+	UE_LOG(LogSentrySdk, Verbose, TEXT("Metrics are not yet supported on Apple platforms."));
+}
+
+void FAppleSentrySubsystem::AddDistribution(const FString& Key, float Value, const FString& Unit, const TMap<FString, FSentryVariant>& Attributes)
+{
+	// Expected API once sentry-cocoa adds ObjC metrics bridge:
+
+	// NSMutableDictionary* attributesDict = [NSMutableDictionary dictionaryWithCapacity:Attributes.Num()];
+	// for (const auto& pair : Attributes)
+	// {
+	// 	SentryAttribute* attribute = FAppleSentryConverters::VariantToAttributeNative(pair.Value);
+	// 	if (attribute != nil)
+	// 	{
+	// 		[attributesDict setObject:attribute.value forKey:pair.Key.GetNSString()];
+	// 	}
+	// }
+	//
+	// NSString* effectiveUnit = Unit.IsEmpty() ? nil : Unit.GetNSString();
+	// [[SENTRY_APPLE_CLASS(SentrySDK) metrics] distributionWithKey:Key.GetNSString() value:(double)Value unit:effectiveUnit attributes:attributesDict];
+
+	UE_LOG(LogSentrySdk, Verbose, TEXT("Metrics are not yet supported on Apple platforms."));
+}
+
+void FAppleSentrySubsystem::AddGauge(const FString& Key, float Value, const FString& Unit, const TMap<FString, FSentryVariant>& Attributes)
+{
+	// Expected API once sentry-cocoa adds ObjC metrics bridge:
+
+	// NSMutableDictionary* attributesDict = [NSMutableDictionary dictionaryWithCapacity:Attributes.Num()];
+	// for (const auto& pair : Attributes)
+	// {
+	// 	SentryAttribute* attribute = FAppleSentryConverters::VariantToAttributeNative(pair.Value);
+	// 	if (attribute != nil)
+	// 	{
+	// 		[attributesDict setObject:attribute.value forKey:pair.Key.GetNSString()];
+	// 	}
+	// }
+	//
+	// NSString* effectiveUnit = Unit.IsEmpty() ? nil : Unit.GetNSString();
+	// [[SENTRY_APPLE_CLASS(SentrySDK) metrics] gaugeWithKey:Key.GetNSString() value:(double)Value unit:effectiveUnit attributes:attributesDict];
+
+	UE_LOG(LogSentrySdk, Verbose, TEXT("Metrics are not yet supported on Apple platforms."));
 }
 
 void FAppleSentrySubsystem::ClearBreadcrumbs()

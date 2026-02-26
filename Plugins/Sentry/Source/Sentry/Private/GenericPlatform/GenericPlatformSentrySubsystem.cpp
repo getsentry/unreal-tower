@@ -7,6 +7,7 @@
 #include "GenericPlatformSentryFeedback.h"
 #include "GenericPlatformSentryId.h"
 #include "GenericPlatformSentryLog.h"
+#include "GenericPlatformSentryMetric.h"
 #include "GenericPlatformSentrySamplingContext.h"
 #include "GenericPlatformSentryScope.h"
 #include "GenericPlatformSentryTransaction.h"
@@ -15,12 +16,15 @@
 
 #include "SentryBeforeBreadcrumbHandler.h"
 #include "SentryBeforeLogHandler.h"
+#include "SentryBeforeMetricHandler.h"
 #include "SentryBeforeSendHandler.h"
 #include "SentryBreadcrumb.h"
 #include "SentryDefines.h"
 #include "SentryEvent.h"
 #include "SentryLog.h"
+#include "SentryMetric.h"
 #include "SentryModule.h"
+#include "SentryOutputDevice.h"
 #include "SentrySamplingContext.h"
 #include "SentrySettings.h"
 #include "SentrySubsystem.h"
@@ -52,7 +56,18 @@ static void PrintVerboseLog(sentry_level_t level, const char* message, va_list a
 	char buffer[512];
 	vsnprintf(buffer, 512, message, args);
 
-	GLog->CategorizedLogf(TEXT("LogSentryInternal"), FGenericPlatformSentryConverters::SentryLevelToLogVerbosity(level), TEXT("%s"), StringCast<TCHAR>(buffer).Get());
+	auto ConvertedMessage = StringCast<TCHAR>(buffer);
+
+	// When emitted within a GLog call chain, write sentry-native debug messages directly to the log file
+	// to avoid GLog's FOutputDeviceRedirector re-entrancy deadlock
+	FOutputDevice* OutputTarget = FSentryOutputDevice::IsSerializing()
+									  ? FGenericPlatformOutputDevices::GetLog()
+									  : GLog;
+
+	if (OutputTarget)
+	{
+		OutputTarget->Serialize(ConvertedMessage.Get(), FGenericPlatformSentryConverters::SentryLevelToLogVerbosity(level), TEXT("LogSentryInternal"));
+	}
 }
 
 /* static */ sentry_value_t FGenericPlatformSentrySubsystem::HandleBeforeSend(sentry_value_t event, void* hint, void* closure)
@@ -67,11 +82,11 @@ static void PrintVerboseLog(sentry_level_t level, const char* message, va_list a
 	}
 }
 
-/* static */ sentry_value_t FGenericPlatformSentrySubsystem::HandleBeforeBreadcrumb(sentry_value_t breadcrumb, void* hint, void* closure)
+/* static */ sentry_value_t FGenericPlatformSentrySubsystem::HandleBeforeBreadcrumb(sentry_value_t breadcrumb, void* closure)
 {
 	if (closure)
 	{
-		return StaticCast<FGenericPlatformSentrySubsystem*>(closure)->OnBeforeBreadcrumb(breadcrumb, hint, closure);
+		return StaticCast<FGenericPlatformSentrySubsystem*>(closure)->OnBeforeBreadcrumb(breadcrumb, closure);
 	}
 	else
 	{
@@ -113,6 +128,16 @@ static void PrintVerboseLog(sentry_level_t level, const char* message, va_list a
 	return log;
 }
 
+/* static */ sentry_value_t FGenericPlatformSentrySubsystem::HandleBeforeMetric(sentry_value_t metric, void* closure)
+{
+	if (closure)
+	{
+		return StaticCast<FGenericPlatformSentrySubsystem*>(closure)->OnBeforeMetric(metric, closure);
+	}
+
+	return metric;
+}
+
 sentry_value_t FGenericPlatformSentrySubsystem::OnBeforeSend(sentry_value_t event, void* hint, void* closure, bool isCrash)
 {
 	if (!closure || this != closure)
@@ -139,10 +164,7 @@ sentry_value_t FGenericPlatformSentrySubsystem::OnBeforeSend(sentry_value_t even
 	return ProcessedEvent ? event : sentry_value_new_null();
 }
 
-// Currently this handler is not set anywhere since the Unreal SDK doesn't use `sentry_add_breadcrumb` directly and relies on
-// custom scope implementation to store breadcrumbs instead.
-// The support for it will be enabled with https://github.com/getsentry/sentry-native/pull/1166
-sentry_value_t FGenericPlatformSentrySubsystem::OnBeforeBreadcrumb(sentry_value_t breadcrumb, void* hint, void* closure)
+sentry_value_t FGenericPlatformSentrySubsystem::OnBeforeBreadcrumb(sentry_value_t breadcrumb, void* closure)
 {
 	if (!closure || this != closure)
 	{
@@ -193,6 +215,33 @@ sentry_value_t FGenericPlatformSentrySubsystem::OnBeforeLog(sentry_value_t log, 
 	USentryLog* ProcessedLogData = Handler->HandleBeforeLog(LogData);
 
 	return ProcessedLogData ? log : sentry_value_new_null();
+}
+
+sentry_value_t FGenericPlatformSentrySubsystem::OnBeforeMetric(sentry_value_t metric, void* closure)
+{
+	if (!closure || this != closure)
+	{
+		return metric;
+	}
+
+	USentryBeforeMetricHandler* Handler = GetBeforeMetricHandler();
+	if (!Handler)
+	{
+		// If custom handler isn't set skip further processing
+		return metric;
+	}
+
+	if (!SentryCallbackUtils::IsCallbackSafeToRun())
+	{
+		return metric;
+	}
+
+	// Create USentryMetric object using the metric wrapper
+	USentryMetric* MetricData = USentryMetric::Create(MakeShareable(new FGenericPlatformSentryMetric(metric)));
+
+	USentryMetric* ProcessedMetricData = Handler->HandleBeforeMetric(MetricData);
+
+	return ProcessedMetricData ? metric : sentry_value_new_null();
 }
 
 sentry_value_t FGenericPlatformSentrySubsystem::OnCrash(const sentry_ucontext_t* uctx, sentry_value_t event, void* closure)
@@ -297,6 +346,7 @@ FGenericPlatformSentrySubsystem::FGenericPlatformSentrySubsystem()
 	: beforeSend(nullptr)
 	, beforeBreadcrumb(nullptr)
 	, beforeLog(nullptr)
+	, beforeMetric(nullptr)
 	, sampler(nullptr)
 	, crashReporter(nullptr)
 	, isEnabled(false)
@@ -307,12 +357,13 @@ FGenericPlatformSentrySubsystem::FGenericPlatformSentrySubsystem()
 {
 }
 
-void FGenericPlatformSentrySubsystem::InitWithSettings(const USentrySettings* settings, USentryBeforeSendHandler* beforeSendHandler, USentryBeforeBreadcrumbHandler* beforeBreadcrumbHandler, USentryBeforeLogHandler* beforeLogHandler, USentryTraceSampler* traceSampler)
+void FGenericPlatformSentrySubsystem::InitWithSettings(const USentrySettings* settings, const FSentryCallbackHandlers& callbackHandlers)
 {
-	beforeSend = beforeSendHandler;
-	beforeBreadcrumb = beforeBreadcrumbHandler;
-	beforeLog = beforeLogHandler;
-	sampler = traceSampler;
+	beforeSend = callbackHandlers.BeforeSendHandler;
+	beforeBreadcrumb = callbackHandlers.BeforeBreadcrumbHandler;
+	beforeLog = callbackHandlers.BeforeLogHandler;
+	beforeMetric = callbackHandlers.BeforeMetricHandler;
+	sampler = callbackHandlers.TraceSampler;
 
 	sentry_options_t* options = sentry_options_new();
 
@@ -365,6 +416,11 @@ void FGenericPlatformSentrySubsystem::InitWithSettings(const USentrySettings* se
 	ConfigureCertsPath(options);
 	ConfigureNetworkConnectFunc(options);
 
+	if (settings->EnableExternalCrashReporter)
+	{
+		ConfigureCrashReporterPath(options);
+	}
+
 	sentry_options_set_dsn(options, TCHAR_TO_UTF8(*settings->GetEffectiveDsn()));
 	sentry_options_set_release(options, TCHAR_TO_UTF8(*settings->GetEffectiveRelease()));
 	sentry_options_set_environment(options, TCHAR_TO_UTF8(*settings->GetEffectiveEnvironment()));
@@ -382,10 +438,25 @@ void FGenericPlatformSentrySubsystem::InitWithSettings(const USentrySettings* se
 	sentry_options_set_logger_enabled_when_crashed(options, settings->EnableOnCrashLogging);
 	sentry_options_set_enable_logs(options, settings->EnableStructuredLogging);
 	sentry_options_set_logs_with_attributes(options, true);
+	sentry_options_set_enable_metrics(options, settings->EnableMetrics);
+	sentry_options_set_before_send_metric(options, HandleBeforeMetric, this);
+
+	if (beforeBreadcrumb)
+	{
+		sentry_options_set_before_breadcrumb(options, HandleBeforeBreadcrumb, this);
+	}
 
 	if (settings->bRequireUserConsent)
 	{
 		sentry_options_set_require_user_consent(options, 1);
+	}
+
+	if (settings->EnableOfflineCaching)
+	{
+		sentry_options_set_cache_keep(options, 1);
+		sentry_options_set_cache_max_items(options, settings->CacheMaxItems);
+		sentry_options_set_cache_max_size(options, settings->CacheMaxSize);
+		sentry_options_set_cache_max_age(options, settings->CacheMaxAge);
 	}
 
 	int initResult = sentry_init(options);
@@ -450,15 +521,6 @@ ESentryCrashedLastRun FGenericPlatformSentrySubsystem::IsCrashedLastRun()
 
 void FGenericPlatformSentrySubsystem::AddBreadcrumb(TSharedPtr<ISentryBreadcrumb> breadcrumb)
 {
-	if (beforeBreadcrumb != nullptr)
-	{
-		sentry_value_t processedBreadcrumb = HandleBeforeBreadcrumb(StaticCastSharedPtr<FGenericPlatformSentryBreadcrumb>(breadcrumb)->GetNativeObject(), nullptr, this);
-		if (sentry_value_is_null(processedBreadcrumb))
-		{
-			return;
-		}
-	}
-
 	sentry_add_breadcrumb(StaticCastSharedPtr<FGenericPlatformSentryBreadcrumb>(breadcrumb)->GetNativeObject());
 }
 
@@ -471,37 +533,14 @@ void FGenericPlatformSentrySubsystem::AddBreadcrumbWithParams(const FString& Mes
 	Breadcrumb->SetData(Data);
 	Breadcrumb->SetLevel(Level);
 
-	if (beforeBreadcrumb != nullptr)
-	{
-		sentry_value_t processdBreadcrumb = HandleBeforeBreadcrumb(Breadcrumb->GetNativeObject(), nullptr, this);
-		if (sentry_value_is_null(processdBreadcrumb))
-		{
-			return;
-		}
-	}
-
-	sentry_add_breadcrumb(StaticCastSharedPtr<FGenericPlatformSentryBreadcrumb>(Breadcrumb)->GetNativeObject());
+	sentry_add_breadcrumb(Breadcrumb->GetNativeObject());
 }
 
 void FGenericPlatformSentrySubsystem::AddLog(const FString& Message, ESentryLevel Level, const TMap<FString, FSentryVariant>& Attributes)
 {
 	FTCHARToUTF8 MessageUtf8(*Message);
 
-	// Only create attributes object if we have per-log attributes.
-	// Passing null preserves global attributes set via SetAttribute().
-	sentry_value_t attributes;
-	if (Attributes.Num() > 0)
-	{
-		attributes = sentry_value_new_object();
-		for (auto it = Attributes.CreateConstIterator(); it; ++it)
-		{
-			sentry_value_set_by_key(attributes, TCHAR_TO_UTF8(*it.Key()), FGenericPlatformSentryConverters::VariantToAttributeNative(it.Value()));
-		}
-	}
-	else
-	{
-		attributes = sentry_value_new_null();
-	}
+	sentry_value_t attributes = FGenericPlatformSentryConverters::VariantMapToAttributesNative(Attributes);
 
 	switch (Level)
 	{
@@ -522,6 +561,21 @@ void FGenericPlatformSentrySubsystem::AddLog(const FString& Message, ESentryLeve
 		sentry_log_debug(MessageUtf8.Get(), attributes);
 		break;
 	}
+}
+
+void FGenericPlatformSentrySubsystem::AddCount(const FString& Key, int32 Value, const TMap<FString, FSentryVariant>& Attributes)
+{
+	sentry_metrics_count(TCHAR_TO_UTF8(*Key), Value, FGenericPlatformSentryConverters::VariantMapToAttributesNative(Attributes));
+}
+
+void FGenericPlatformSentrySubsystem::AddDistribution(const FString& Key, float Value, const FString& Unit, const TMap<FString, FSentryVariant>& Attributes)
+{
+	sentry_metrics_distribution(TCHAR_TO_UTF8(*Key), Value, TCHAR_TO_UTF8(*Unit), FGenericPlatformSentryConverters::VariantMapToAttributesNative(Attributes));
+}
+
+void FGenericPlatformSentrySubsystem::AddGauge(const FString& Key, float Value, const FString& Unit, const TMap<FString, FSentryVariant>& Attributes)
+{
+	sentry_metrics_gauge(TCHAR_TO_UTF8(*Key), Value, TCHAR_TO_UTF8(*Unit), FGenericPlatformSentryConverters::VariantMapToAttributesNative(Attributes));
 }
 
 void FGenericPlatformSentrySubsystem::ClearBreadcrumbs()
@@ -644,7 +698,34 @@ TSharedPtr<ISentryId> FGenericPlatformSentrySubsystem::CaptureEnsure(const FStri
 
 	sentry_value_set_stacktrace(exceptionEvent, nullptr, 0);
 
-	sentry_uuid_t id = sentry_capture_event(exceptionEvent);
+	FString ScreenshotPath;
+
+	if (isScreenshotAttachmentEnabled && IsScreenshotSupported())
+	{
+		ScreenshotPath = GetScreenshotPath();
+		if (!SentryScreenshotUtils::CaptureScreenshot(ScreenshotPath))
+		{
+			ScreenshotPath.Empty();
+		}
+	}
+
+	if (ScreenshotPath.IsEmpty())
+	{
+		sentry_uuid_t id = sentry_capture_event(exceptionEvent);
+		return MakeShareable(new FGenericPlatformSentryId(id));
+	}
+
+	sentry_scope_t* scope = sentry_local_scope_new();
+
+	sentry_attachment_t* screenshotAttachment =
+		sentry_scope_attach_file(scope, TCHAR_TO_UTF8(*ScreenshotPath));
+	sentry_attachment_set_filename(screenshotAttachment, "screenshot.png");
+	sentry_attachment_set_content_type(screenshotAttachment, "image/png");
+
+	sentry_uuid_t id = sentry_capture_event_with_scope(exceptionEvent, scope);
+
+	IFileManager::Get().Delete(*ScreenshotPath);
+
 	return MakeShareable(new FGenericPlatformSentryId(id));
 }
 
@@ -855,6 +936,11 @@ USentryBeforeLogHandler* FGenericPlatformSentrySubsystem::GetBeforeLogHandler() 
 	return beforeLog;
 }
 
+USentryBeforeMetricHandler* FGenericPlatformSentrySubsystem::GetBeforeMetricHandler() const
+{
+	return beforeMetric;
+}
+
 USentryTraceSampler* FGenericPlatformSentrySubsystem::GetTraceSampler() const
 {
 	return sampler;
@@ -897,6 +983,12 @@ FString FGenericPlatformSentrySubsystem::GetHandlerPath() const
 	const FString HandlerFullPath = FPaths::ConvertRelativePathToFull(HandlerPath);
 
 	return HandlerFullPath;
+}
+
+FString FGenericPlatformSentrySubsystem::GetCrashReporterPath() const
+{
+	const FString CrashReporterPath = FPaths::Combine(FSentryModule::Get().GetBinariesPath(), GetCrashReporterExecutableName());
+	return FPaths::ConvertRelativePathToFull(CrashReporterPath);
 }
 
 FString FGenericPlatformSentrySubsystem::GetDatabasePath() const

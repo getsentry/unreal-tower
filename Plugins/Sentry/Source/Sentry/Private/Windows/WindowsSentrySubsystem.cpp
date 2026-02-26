@@ -11,13 +11,13 @@
 
 #include "Misc/Paths.h"
 
-void FWindowsSentrySubsystem::InitWithSettings(const USentrySettings* Settings, USentryBeforeSendHandler* BeforeSendHandler, USentryBeforeBreadcrumbHandler* BeforeBreadcrumbHandler, USentryBeforeLogHandler* BeforeLogHandler, USentryTraceSampler* TraceSampler)
+void FWindowsSentrySubsystem::InitWithSettings(const USentrySettings* Settings, const FSentryCallbackHandlers& CallbackHandlers)
 {
 	// Detect Wine/Proton before initializing
 	WineProtonInfo = FSentryPlatformDetectionUtils::DetectWineProton();
 
 	// Call parent implementation (handles crash logger initialization)
-	FMicrosoftSentrySubsystem::InitWithSettings(Settings, BeforeSendHandler, BeforeBreadcrumbHandler, BeforeLogHandler, TraceSampler);
+	FMicrosoftSentrySubsystem::InitWithSettings(Settings, CallbackHandlers);
 
 	// Add Wine/Proton context for all events if detected
 	if (WineProtonInfo.bIsRunningUnderWine && IsEnabled())
@@ -93,6 +93,17 @@ void FWindowsSentrySubsystem::ConfigureHandlerPath(sentry_options_t* Options)
 		UE_LOG(LogSentrySdk, Log, TEXT("Enabling Crashpad stack capture adjustment for Wine/Proton compatibility"));
 		sentry_options_set_crashpad_limit_stack_capture_to_sp(Options, 1);
 	}
+}
+
+void FWindowsSentrySubsystem::ConfigureCrashReporterPath(sentry_options_t* Options)
+{
+	const FString CrashReporterPath = GetCrashReporterPath();
+	if (!FPaths::FileExists(CrashReporterPath))
+	{
+		UE_LOG(LogSentrySdk, Error, TEXT("External crash reporter executable couldn't be found at: %s"), *CrashReporterPath);
+		return;
+	}
+	sentry_options_set_external_crash_reporter_pathw(Options, *CrashReporterPath);
 }
 
 sentry_value_t FWindowsSentrySubsystem::OnCrash(const sentry_ucontext_t* uctx, sentry_value_t event, void* closure)

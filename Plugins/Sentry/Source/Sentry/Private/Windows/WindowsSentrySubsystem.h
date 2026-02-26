@@ -11,12 +11,14 @@
 class FWindowsSentrySubsystem : public FMicrosoftSentrySubsystem
 {
 public:
-	virtual void InitWithSettings(const USentrySettings* Settings, USentryBeforeSendHandler* BeforeSendHandler, USentryBeforeBreadcrumbHandler* BeforeBreadcrumbHandler, USentryBeforeLogHandler* BeforeLogHandler, USentryTraceSampler* TraceSampler) override;
+	virtual void InitWithSettings(const USentrySettings* Settings, const FSentryCallbackHandlers& CallbackHandlers) override;
 
 protected:
 	virtual void ConfigureHandlerPath(sentry_options_t* Options) override;
+	virtual void ConfigureCrashReporterPath(sentry_options_t* Options) override;
 
 	virtual FString GetHandlerExecutableName() const override { return TEXT("crashpad_handler.exe"); }
+	virtual FString GetCrashReporterExecutableName() const override { return TEXT("Sentry.CrashReporter.exe"); }
 
 	virtual sentry_value_t OnCrash(const sentry_ucontext_t* uctx, sentry_value_t event, void* closure) override;
 

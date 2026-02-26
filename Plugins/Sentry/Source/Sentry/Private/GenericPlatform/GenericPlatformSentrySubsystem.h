@@ -19,13 +19,16 @@ class FGenericPlatformSentrySubsystem : public ISentrySubsystem
 public:
 	FGenericPlatformSentrySubsystem();
 
-	virtual void InitWithSettings(const USentrySettings* settings, USentryBeforeSendHandler* beforeSendHandler, USentryBeforeBreadcrumbHandler* beforeBreadcrumbHandler, USentryBeforeLogHandler* beforeLogHandler, USentryTraceSampler* traceSampler) override;
+	virtual void InitWithSettings(const USentrySettings* settings, const FSentryCallbackHandlers& callbackHandlers) override;
 	virtual void Close() override;
 	virtual bool IsEnabled() override;
 	virtual ESentryCrashedLastRun IsCrashedLastRun() override;
 	virtual void AddBreadcrumb(TSharedPtr<ISentryBreadcrumb> breadcrumb) override;
 	virtual void AddBreadcrumbWithParams(const FString& Message, const FString& Category, const FString& Type, const TMap<FString, FSentryVariant>& Data, ESentryLevel Level) override;
 	virtual void AddLog(const FString& Message, ESentryLevel Level, const TMap<FString, FSentryVariant>& Attributes) override;
+	virtual void AddCount(const FString& Key, int32 Value, const TMap<FString, FSentryVariant>& Attributes) override;
+	virtual void AddDistribution(const FString& Key, float Value, const FString& Unit, const TMap<FString, FSentryVariant>& Attributes) override;
+	virtual void AddGauge(const FString& Key, float Value, const FString& Unit, const TMap<FString, FSentryVariant>& Attributes) override;
 	virtual void ClearBreadcrumbs() override;
 	virtual void AddAttachment(TSharedPtr<ISentryAttachment> attachment) override;
 	virtual void RemoveAttachment(TSharedPtr<ISentryAttachment> attachment) override;
@@ -61,6 +64,7 @@ public:
 	USentryBeforeSendHandler* GetBeforeSendHandler() const;
 	USentryBeforeBreadcrumbHandler* GetBeforeBreadcrumbHandler() const;
 	USentryBeforeLogHandler* GetBeforeLogHandler() const;
+	USentryBeforeMetricHandler* GetBeforeMetricHandler() const;
 	USentryTraceSampler* GetTraceSampler() const;
 
 	void TryCaptureScreenshot();
@@ -72,15 +76,19 @@ protected:
 	virtual void ConfigureCertsPath(sentry_options_t* Options) {}
 	virtual void ConfigureLogFileAttachment(sentry_options_t* Options) {}
 	virtual void ConfigureNetworkConnectFunc(sentry_options_t* Options) {}
+	virtual void ConfigureCrashReporterPath(sentry_options_t* Options) {}
 
 	FString GetHandlerPath() const;
 	FString GetDatabasePath() const;
 	FString GetScreenshotPath() const;
+	FString GetCrashReporterPath() const;
 	virtual FString GetHandlerExecutableName() const { return TEXT("invalid"); }
+	virtual FString GetCrashReporterExecutableName() const { return TEXT("invalid"); }
 
 	virtual sentry_value_t OnBeforeSend(sentry_value_t event, void* hint, void* closure, bool isCrash);
-	virtual sentry_value_t OnBeforeBreadcrumb(sentry_value_t breadcrumb, void* hint, void* closure);
+	virtual sentry_value_t OnBeforeBreadcrumb(sentry_value_t breadcrumb, void* closure);
 	virtual sentry_value_t OnBeforeLog(sentry_value_t log, void* closure);
+	virtual sentry_value_t OnBeforeMetric(sentry_value_t metric, void* closure);
 	virtual sentry_value_t OnCrash(const sentry_ucontext_t* uctx, sentry_value_t event, void* closure);
 	virtual double OnTraceSampling(const sentry_transaction_context_t* transaction_ctx, sentry_value_t custom_sampling_ctx, const int* parent_sampled);
 
@@ -98,14 +106,16 @@ private:
 	 * Static wrappers that are passed to the Sentry library.
 	 */
 	static sentry_value_t HandleBeforeSend(sentry_value_t event, void* hint, void* closure);
-	static sentry_value_t HandleBeforeBreadcrumb(sentry_value_t breadcrumb, void* hint, void* closure);
+	static sentry_value_t HandleBeforeBreadcrumb(sentry_value_t breadcrumb, void* closure);
 	static sentry_value_t HandleBeforeLog(sentry_value_t log, void* closure);
+	static sentry_value_t HandleBeforeMetric(sentry_value_t metric, void* closure);
 	static sentry_value_t HandleOnCrash(const sentry_ucontext_t* uctx, sentry_value_t event, void* closure);
 	static double HandleTraceSampling(const sentry_transaction_context_t* transaction_ctx, sentry_value_t custom_sampling_ctx, const int* parent_sampled, void* closure);
 
 	USentryBeforeSendHandler* beforeSend;
 	USentryBeforeBreadcrumbHandler* beforeBreadcrumb;
 	USentryBeforeLogHandler* beforeLog;
+	USentryBeforeMetricHandler* beforeMetric;
 	USentryTraceSampler* sampler;
 
 	TSharedPtr<FGenericPlatformSentryCrashReporter> crashReporter;
