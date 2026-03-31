@@ -19,6 +19,11 @@ void FWindowsSentrySubsystem::InitWithSettings(const USentrySettings* Settings, 
 	// Call parent implementation (handles crash logger initialization)
 	FMicrosoftSentrySubsystem::InitWithSettings(Settings, CallbackHandlers);
 
+	if (Settings->EnableExternalCrashReporter)
+	{
+		ConfigureCrashReporterAppearance(Settings);
+	}
+
 	// Add Wine/Proton context for all events if detected
 	if (WineProtonInfo.bIsRunningUnderWine && IsEnabled())
 	{
@@ -75,20 +80,27 @@ void FWindowsSentrySubsystem::InitWithSettings(const USentrySettings* Settings, 
 	}
 }
 
+FString FWindowsSentrySubsystem::GetHandlerExecutableName() const
+{
+	return bUseNativeBackend ? TEXT("sentry-crash.exe") : TEXT("crashpad_handler.exe");
+}
+
 void FWindowsSentrySubsystem::ConfigureHandlerPath(sentry_options_t* Options)
 {
 	const FString HandlerPath = GetHandlerPath();
 
 	if (!FPaths::FileExists(HandlerPath))
 	{
-		UE_LOG(LogSentrySdk, Error, TEXT("Crashpad executable couldn't be found."));
+		UE_LOG(LogSentrySdk, Error, TEXT("Crash handler executable couldn't be found at: %s"), *HandlerPath);
 		return;
 	}
 
 	sentry_options_set_handler_pathw(Options, *HandlerPath);
+}
 
-	// Enable stack capture adjustment for Wine/Proton
-	if (WineProtonInfo.bIsRunningUnderWine)
+void FWindowsSentrySubsystem::ConfigureStackCaptureStrategy(sentry_options_t* Options)
+{
+	if (WineProtonInfo.bIsRunningUnderWine && !bUseNativeBackend)
 	{
 		UE_LOG(LogSentrySdk, Log, TEXT("Enabling Crashpad stack capture adjustment for Wine/Proton compatibility"));
 		sentry_options_set_crashpad_limit_stack_capture_to_sp(Options, 1);
@@ -111,6 +123,16 @@ sentry_value_t FWindowsSentrySubsystem::OnCrash(const sentry_ucontext_t* uctx, s
 	// Windows-specific crash handling can go here if needed in the future
 	// For now, just delegate to parent which handles the crash logger
 	return FMicrosoftSentrySubsystem::OnCrash(uctx, event, closure);
+}
+
+FString FWindowsSentrySubsystem::GetDeviceType() const
+{
+	if (FSentryPlatformDetectionUtils::IsSteamDeck())
+	{
+		return TEXT("Handheld");
+	}
+
+	return FMicrosoftSentrySubsystem::GetDeviceType();
 }
 
 #endif // USE_SENTRY_NATIVE

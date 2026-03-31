@@ -75,7 +75,11 @@ void FAppleSentrySubsystem::InitWithSettings(const USentrySettings* settings, co
 #if SENTRY_UIKIT_AVAILABLE
 			options.attachScreenshot = settings->AttachScreenshot;
 #endif
-			options.onCrashedLastRun = ^(SentryEvent* event) {
+			options.onLastRunStatusDetermined = ^(SentryLastRunStatus status, SentryEvent* event) {
+				if (status != SentryLastRunStatusDidCrash || event == nil)
+				{
+					return;
+				}
 				if (settings->AttachScreenshot)
 				{
 					// If a screenshot was captured during assertion/crash in the previous app run
@@ -111,6 +115,12 @@ void FAppleSentrySubsystem::InitWithSettings(const USentrySettings* settings, co
 						return nil;
 					}
 
+					TSentryCallbackGuard<USentryTraceSampler> ReentrancyGuard;
+					if (ReentrancyGuard.IsReentrant())
+					{
+						return nil;
+					}
+
 					USentrySamplingContext* Context = USentrySamplingContext::Create(MakeShareable(new FAppleSentrySamplingContext(samplingContext)));
 
 					float samplingValue;
@@ -123,6 +133,12 @@ void FAppleSentrySubsystem::InitWithSettings(const USentrySettings* settings, co
 					if (!SentryCallbackUtils::IsCallbackSafeToRun())
 					{
 						// Breadcrumb will be added without calling a `beforeBreadcrumb` handler
+						return breadcrumb;
+					}
+
+					TSentryCallbackGuard<USentryBeforeBreadcrumbHandler> ReentrancyGuard;
+					if (ReentrancyGuard.IsReentrant())
+					{
 						return breadcrumb;
 					}
 
@@ -142,6 +158,12 @@ void FAppleSentrySubsystem::InitWithSettings(const USentrySettings* settings, co
 						return log;
 					}
 
+					TSentryCallbackGuard<USentryBeforeLogHandler> ReentrancyGuard;
+					if (ReentrancyGuard.IsReentrant())
+					{
+						return log;
+					}
+
 					USentryLog* LogToProcess = USentryLog::Create(MakeShareable(new FAppleSentryLog(log)));
 
 					USentryLog* ProcessedLog = beforeLogHandler->HandleBeforeLog(LogToProcess);
@@ -155,6 +177,12 @@ void FAppleSentrySubsystem::InitWithSettings(const USentrySettings* settings, co
 					if (!SentryCallbackUtils::IsCallbackSafeToRun())
 					{
 						// Event will be sent without calling a `onBeforeSend` handler
+						return event;
+					}
+
+					TSentryCallbackGuard<USentryBeforeSendHandler> ReentrancyGuard;
+					if (ReentrancyGuard.IsReentrant())
+					{
 						return event;
 					}
 
@@ -400,6 +428,17 @@ TSharedPtr<ISentryId> FAppleSentrySubsystem::CaptureEnsure(const FString& type, 
 	return id;
 }
 
+TSharedPtr<ISentryId> FAppleSentrySubsystem::CaptureHang(uint32 HungThreadId)
+{
+	// Hang tracking is handled by the native Apple SDK via built-in App Hang detection (see EnableAppNotRespondingTracking setting)
+	return nullptr;
+}
+
+bool FAppleSentrySubsystem::IsHangTrackingSupported() const
+{
+	return false;
+}
+
 void FAppleSentrySubsystem::CaptureFeedback(TSharedPtr<ISentryFeedback> feedback)
 {
 	TSharedPtr<FAppleSentryFeedback> feedbackApple = StaticCastSharedPtr<FAppleSentryFeedback>(feedback);
@@ -459,6 +498,18 @@ void FAppleSentrySubsystem::SetLevel(ESentryLevel level)
 {
 	[SENTRY_APPLE_CLASS(SentrySDK) configureScope:^(SentryScope* scope) {
 		[scope setLevel:FAppleSentryConverters::SentryLevelToNative(level)];
+	}];
+}
+
+void FAppleSentrySubsystem::SetRelease(const FString& release)
+{
+	// sentry-cocoa does not provide a public API to change release after initialization
+}
+
+void FAppleSentrySubsystem::SetEnvironment(const FString& environment)
+{
+	[SENTRY_APPLE_CLASS(SentrySDK) configureScope:^(SentryScope* scope) {
+		[scope setEnvironment:environment.GetNSString()];
 	}];
 }
 

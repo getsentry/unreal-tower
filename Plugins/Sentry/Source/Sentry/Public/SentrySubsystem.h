@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Misc/EngineVersionComparison.h"
 #include "Subsystems/EngineSubsystem.h"
 
 #include "SentryDataTypes.h"
@@ -29,6 +30,15 @@ class USentryTransactionContext;
 class ISentrySubsystem;
 class FSentryOutputDevice;
 class FSentryErrorOutputDevice;
+class FSentryHangWatcher;
+class FSentryPerfFrameTimeMonitor;
+class FSentryPerfMetricAttributes;
+class FSentryPerfGCMonitor;
+class FSentryPerfGameStatsMonitor;
+
+#if !UE_VERSION_OLDER_THAN(5, 7, 0)
+class FSentryPerfNetworkMonitor;
+#endif
 
 DECLARE_DELEGATE_OneParam(FConfigureSettingsNativeDelegate, USentrySettings*);
 DECLARE_DYNAMIC_DELEGATE_OneParam(FConfigureSettingsDelegate, USentrySettings*, Settings);
@@ -425,6 +435,26 @@ public:
 	void SetLevel(ESentryLevel Level);
 
 	/**
+	 * Sets the release version.
+	 * To apply the new release value, start a new session after calling this function.
+	 *
+	 * @param Release The release version string.
+	 *
+	 * @note On Apple platforms (macOS/iOS), this method is a no-op.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Sentry")
+	void SetRelease(const FString& Release);
+
+	/**
+	 * Sets the environment.
+	 * To apply the new environment value, start a new session after calling this function.
+	 *
+	 * @param Environment The environment string (e.g. "production", "staging").
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Sentry")
+	void SetEnvironment(const FString& Environment);
+
+	/**
 	 * Starts a new session.
 	 * If there's a running session, it ends it before starting the new one.
 	 * This method can be used in combination with @EndSession to manually track sessions.
@@ -571,6 +601,12 @@ private:
 	/** Add custom Sentry output device to intercept errors */
 	void ConfigureErrorOutputDevice();
 
+	/** Set up hang watcher for detecting unresponsive threads */
+	void ConfigureHangTracking();
+
+	/** Set up automatic performance metrics (frame time, GC pause time, etc.) */
+	void ConfigurePerformanceMetrics();
+
 	/** Add a structured log message with formatting */
 	void AddLog(const FString& Message, ESentryLevel Level, const TMap<FString, FSentryVariant>& Attributes, const FString& Category);
 
@@ -602,4 +638,16 @@ private:
 
 	FDelegateHandle OnAssertDelegate;
 	FDelegateHandle OnEnsureDelegate;
+
+	TSharedPtr<FSentryHangWatcher> HangWatcher;
+
+	TSharedPtr<FSentryPerfMetricAttributes> PerfMetricAttributes;
+	TSharedPtr<FSentryPerfFrameTimeMonitor> PerfFrameTimeMonitor;
+	TSharedPtr<FSentryPerfGameStatsMonitor> PerfGameStatsMonitor;
+	TSharedPtr<FSentryPerfGCMonitor> PerfGCMonitor;
+
+#if !UE_VERSION_OLDER_THAN(5, 7, 0)
+	TSharedPtr<FSentryPerfNetworkMonitor> PerfNetworkMonitor;
+	FDelegateHandle OnNetDriverCreatedHandle;
+#endif
 };

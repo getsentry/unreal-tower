@@ -354,7 +354,6 @@ SWIFT_CLASS_NAMED("DefaultRateLimits")
 @class SentrySessionReplayEnvironmentChecker;
 @class SentryDispatchQueueWrapper;
 @protocol SentryNSNotificationCenterWrapper;
-@class SentryCrashWrapper;
 @class SentryBinaryImageCache;
 @class SentryDebugImageProvider;
 @class SentrySysctl;
@@ -376,8 +375,6 @@ SWIFT_CLASS_PROPERTY(@property (nonatomic, class, readonly, strong) SentryDispat
 + (SentryDispatchQueueWrapper * _Nonnull)dispatchQueueWrapper SWIFT_WARN_UNUSED_RESULT;
 SWIFT_CLASS_PROPERTY(@property (nonatomic, class, readonly, strong) id <SentryNSNotificationCenterWrapper> _Nonnull notificationCenterWrapper;)
 + (id <SentryNSNotificationCenterWrapper> _Nonnull)notificationCenterWrapper SWIFT_WARN_UNUSED_RESULT;
-SWIFT_CLASS_PROPERTY(@property (nonatomic, class, readonly, strong) SentryCrashWrapper * _Nonnull crashWrapper;)
-+ (SentryCrashWrapper * _Nonnull)crashWrapper SWIFT_WARN_UNUSED_RESULT;
 SWIFT_CLASS_PROPERTY(@property (nonatomic, class, readonly, strong) SentryBinaryImageCache * _Nonnull binaryImageCache;)
 + (SentryBinaryImageCache * _Nonnull)binaryImageCache SWIFT_WARN_UNUSED_RESULT;
 SWIFT_CLASS_PROPERTY(@property (nonatomic, class, readonly, strong) SentryDebugImageProvider * _Nonnull debugImageProvider;)
@@ -441,6 +438,7 @@ SWIFT_PROTOCOL("_TtP6Sentry33SentryNSNotificationCenterWrapper_")
 
 @class SentryDsn;
 @class SentryLog;
+enum SentryLastRunStatus : NSInteger;
 @class SentryScope;
 @class SentryViewScreenshotOptions;
 @class SentryReplayOptions;
@@ -537,7 +535,28 @@ SWIFT_CLASS_NAMED("Options")
 /// if you prefer a callback for every event.
 /// @warning It is not guaranteed that this is called on the main thread.
 /// @note Crash reporting is automatically disabled if a debugger is attached.
-@property (nonatomic, copy) SentryOnCrashedLastRunCallback _Nullable onCrashedLastRun;
+@property (nonatomic, copy) SentryOnCrashedLastRunCallback _Nullable onCrashedLastRun SWIFT_DEPRECATED_MSG("Use onLastRunStatusDetermined instead, which is called regardless of whether the app crashed.");
+/// A block called shortly after the initialization of the SDK when the crash status of the
+/// last program execution has been determined.
+/// This callback is invoked regardless of whether the app crashed or not:
+/// <ul>
+///   <li>
+///     If the last run ended with a crash, <code>status</code> is <code>SentryLastRunStatus/didCrash</code> and
+///     <code>crashEvent</code> contains the crash event.
+///   </li>
+///   <li>
+///     If the last run did <em>not</em> end with a crash, <code>status</code> is
+///     <code>SentryLastRunStatus/didNotCrash</code> and <code>crashEvent</code> is <code>nil</code>.
+///   </li>
+/// </ul>
+/// This callback is only executed once per <code>SentrySDK/start(configureOptions:)</code> lifecycle.
+/// warning:
+/// It is not guaranteed that this is called on the main thread.
+/// note:
+/// Crashes that occur while a debugger is attached are not recorded.
+/// In that case, the callback reports <code>SentryLastRunStatus/didNotCrash</code>
+/// even though the app did crash.
+@property (nonatomic, copy) void (^ _Nullable onLastRunStatusDetermined)(enum SentryLastRunStatus, SentryEvent * _Nullable);
 /// Indicates the percentage of events being sent to Sentry.
 /// @discussion Specifying 0 discards all events, 1.0 or nil sends all events, 0.01 collects 1% of
 /// all events.
@@ -1280,6 +1299,77 @@ SWIFT_CLASS("_TtC6Sentry18SentryClientReport")
 + (nonnull instancetype)new SWIFT_UNAVAILABLE_MSG("-init is unavailable");
 @end
 
+@class SentryCrashSwift;
+/// Facade that bridges the Sentry SDK layer to the SentryCrash subsystem.
+/// <code>SentryCrashBridge</code> is the single entry point through which SentryCrash
+/// accesses SDK services. It replaces direct <code>SentryDependencyContainer</code>
+/// look-ups inside the crash reporter, keeping the dependency direction
+/// one-way: <em>Sentry → SentryCrash</em>, never the reverse.
+/// <h2>Isolation boundary</h2>
+/// This bridge is the first step toward fully isolating SentryCrash from the
+/// SDK. Today the two layers still share a handful of model types (e.g.
+/// <code>SentryCrashSwift</code>, notification-center wrappers). Future work will replace
+/// those shared types with protocol abstractions so that SentryCrash can be
+/// built and tested independently.
+/// <h2>Exposed services</h2>
+/// | Service                        | Used by SentryCrash for                                 |
+/// |––––––––––––––––|———————————————————|
+/// | <code>notificationCenterWrapper</code>    | Observing app-lifecycle events (foreground, background)  |
+/// | <code>dateProvider</code>                 | Timestamping crash reports and session boundaries        |
+/// | <code>crashReporter</code>                | Reading system info, crash state, and launch metadata    |
+/// | <code>uncaughtExceptionHandler</code>     | Installing / reading the NSException handler             |
+/// | <code>activeScreenSize()</code> (UIKit)   | Recording screen dimensions in device context            |
+/// <h2>Threading</h2>
+/// The bridge is created once during <code>SentryCrashIntegration.install(with:)</code> and
+/// is safe to read from any thread after initialization. The
+/// <code>uncaughtExceptionHandler</code> property may be written from the SentryCrash
+/// installation path and read from the crash-time exception handler.
+/// <h2>Usage</h2>
+/// The bridge is created by the integration layer and passed down:
+/// \code
+/// let bridge = SentryCrashBridge(
+///     notificationCenterWrapper: notificationCenter,
+///     dateProvider: dateProvider,
+///     crashReporter: crashReporter
+/// )
+/// // Passed to SentryCrashWrapper, SentryCrashIntegrationSessionHandler,
+/// // and the underlying SentryCrash / SentryCrashInstallation instances.
+///
+/// \endcode
+SWIFT_CLASS("_TtC6Sentry17SentryCrashBridge")
+@interface SentryCrashBridge : NSObject
+/// Wrapper around <code>NSNotificationCenter</code> used by SentryCrash to observe
+/// app-lifecycle transitions (e.g. <code>UIApplicationDidBecomeActiveNotification</code>).
+@property (nonatomic, readonly, strong) id <SentryNSNotificationCenterWrapper> _Nonnull notificationCenterWrapper;
+/// Provides the current date/time. Used for timestamping crash reports and
+/// computing session durations.
+@property (nonatomic, readonly, strong) id <SentryCurrentDateProvider> _Nonnull dateProvider;
+/// The crash reporter instance that owns system info, crash state, and the
+/// on-disk report store. This is the main object SentryCrash interacts with.
+@property (nonatomic, readonly, strong) SentryCrashSwift * _Nonnull crashReporter;
+/// The C-convention uncaught-exception handler installed by SentryCrash.
+/// This is a convenience proxy for <code>crashReporter.uncaughtExceptionHandler</code>.
+/// The NSException monitor (<code>SentryCrashMonitor_NSException</code>) writes this
+/// during installation so it can be restored if monitoring is later disabled.
+@property (nonatomic) void (* _Nullable uncaughtExceptionHandler)(NSException * _Nonnull);
+/// Returns the size of the active screen in points (iOS/tvOS only).
+/// Delegates to <code>SentryDependencyContainerSwiftHelper</code> which reads the key
+/// window’s scene. Returns <code>CGSize.zero</code> when no active scene is available.
+- (CGSize)activeScreenSize SWIFT_WARN_UNUSED_RESULT;
+/// Creates a bridge with the SDK services that SentryCrash requires.
+/// \param notificationCenterWrapper Wrapper for subscribing to app-lifecycle
+/// notifications.
+///
+/// \param dateProvider Provider for current timestamps.
+///
+/// \param crashReporter The crash reporter that manages on-disk reports and
+/// system info.
+///
+- (nonnull instancetype)initWithNotificationCenterWrapper:(id <SentryNSNotificationCenterWrapper> _Nonnull)notificationCenterWrapper dateProvider:(id <SentryCurrentDateProvider> _Nonnull)dateProvider crashReporter:(SentryCrashSwift * _Nonnull)crashReporter OBJC_DESIGNATED_INITIALIZER;
+- (nonnull instancetype)init SWIFT_UNAVAILABLE;
++ (nonnull instancetype)new SWIFT_UNAVAILABLE_MSG("-init is unavailable");
+@end
+
 SWIFT_CLASS("_TtC6Sentry28SentryCrashReportFilterSwift")
 @interface SentryCrashReportFilterSwift : NSObject
 - (nonnull instancetype)initWithFilterReports:(void (^ _Nonnull)(NSArray * _Nonnull, void (^ _Nonnull)(NSArray * _Nullable, BOOL, NSError * _Nullable)))filter OBJC_DESIGNATED_INITIALIZER;
@@ -1295,6 +1385,7 @@ SWIFT_CLASS("_TtC6Sentry16SentryCrashSwift")
 - (void)setupOnCrash;
 - (void)removeOnCrash;
 @property (nonatomic) void (* _Nullable uncaughtExceptionHandler)(NSException * _Nonnull);
+- (void)setBridge:(SentryCrashBridge * _Nonnull)bridge;
 @property (nonatomic, copy) NSString * _Nonnull basePath;
 - (void)install;
 - (void)uninstall;
@@ -1310,7 +1401,7 @@ SWIFT_CLASS("_TtC6Sentry16SentryCrashSwift")
 SWIFT_CLASS("_TtC6Sentry18SentryCrashWrapper")
 @interface SentryCrashWrapper : NSObject
 @property (nonatomic, readonly, copy) NSDictionary<NSString *, id> * _Nonnull systemInfo;
-- (nonnull instancetype)initWithProcessInfoWrapper:(id <SentryProcessInfoSource> _Nonnull)processInfoWrapper OBJC_DESIGNATED_INITIALIZER;
+- (nonnull instancetype)initWithProcessInfoWrapper:(id <SentryProcessInfoSource> _Nonnull)processInfoWrapper bridge:(SentryCrashBridge * _Nonnull)bridge OBJC_DESIGNATED_INITIALIZER;
 - (nonnull instancetype)init SWIFT_UNAVAILABLE;
 + (nonnull instancetype)new SWIFT_UNAVAILABLE_MSG("-init is unavailable");
 @end
@@ -1767,6 +1858,8 @@ SWIFT_CLASS("_TtC6Sentry25SentryExperimentalOptions")
 /// API, which allows you to send, view and query counters, gauges and measurements.
 /// @note Default value is @c true.
 @property (nonatomic) BOOL enableMetrics;
+/// When enabled, the SDK uses a more efficient mechanism for detecting watchdog terminations.
+@property (nonatomic) BOOL enableWatchdogTerminationsV2;
 - (void)validateOptions:(NSDictionary<NSString *, id> * _Nullable)options;
 - (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
 @end
@@ -1818,12 +1911,12 @@ typedef SWIFT_ENUM(NSInteger, SentryFeedbackSource, open) {
 @end
 
 @interface SentryFeedback (SWIFT_EXTENSION(Sentry))
-- (NSDictionary<NSString *, id> * _Nonnull)serialize SWIFT_WARN_UNUSED_RESULT;
+/// Returns all attachments for inclusion in the feedback envelope.
+- (NSArray<SentryAttachment *> * _Nonnull)attachmentsForEnvelope SWIFT_WARN_UNUSED_RESULT;
 @end
 
 @interface SentryFeedback (SWIFT_EXTENSION(Sentry))
-/// Returns all attachments for inclusion in the feedback envelope.
-- (NSArray<SentryAttachment *> * _Nonnull)attachmentsForEnvelope SWIFT_WARN_UNUSED_RESULT;
+- (NSDictionary<NSString *, id> * _Nonnull)serialize SWIFT_WARN_UNUSED_RESULT;
 @end
 
 /// API for interacting with the feature User Feedback
@@ -2293,6 +2386,24 @@ SWIFT_PROTOCOL("_TtP6Sentry25SentryIntegrationProtocol_")
 - (void)uninstall;
 @end
 
+/// Represents the crash status of the last program execution.
+/// Use <code>SentrySDK/lastRunStatus</code> to check if the previous app execution
+/// terminated with a crash. Before the SDK is fully initialized, the status
+/// is <code>unknown</code> because the crash reporter hasn’t loaded its state yet.
+/// note:
+/// This enum replaces the <code>crashedLastRun</code> boolean property, which
+/// could not distinguish between “did not crash” and “not yet known.”
+typedef SWIFT_ENUM(NSInteger, SentryLastRunStatus, open) {
+/// The SDK hasn’t determined the crash status yet.
+/// This is the value returned before <code>SentrySDK/start(configureOptions:)</code>
+/// finishes initializing the crash reporter.
+  SentryLastRunStatusUnknown = 0,
+/// The last program execution did <em>not</em> end with a crash.
+  SentryLastRunStatusDidNotCrash = 1,
+/// The last program execution ended with a crash.
+  SentryLastRunStatusDidCrash = 2,
+};
+
 SWIFT_CLASS("_TtC6Sentry17SentryLevelHelper")
 @interface SentryLevelHelper : NSObject
 + (NSString * _Nonnull)nameForLevel:(SentryLevel)level SWIFT_WARN_UNUSED_RESULT;
@@ -2316,6 +2427,7 @@ SWIFT_CLASS("_TtC6Sentry12SentryLocale")
 - (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
 @end
 
+@class SentrySpanId;
 enum SentryLogLevel : NSInteger;
 /// A structured log entry that captures log data with associated attribute metadata.
 /// Use the <code>options.beforeSendLog</code> callback to modify or filter log data.
@@ -2325,6 +2437,8 @@ SWIFT_CLASS("_TtC6Sentry9SentryLog")
 @property (nonatomic, copy) NSDate * _Nonnull timestamp;
 /// The trace ID to associate this log with distributed tracing. This will be set to a valid non-empty value during processing.
 @property (nonatomic, strong) SentryId * _Nonnull traceId;
+/// The span ID of the span that was active when the log was collected.
+@property (nonatomic, strong) SentrySpanId * _Nullable spanId;
 /// The severity level of the log entry
 @property (nonatomic) enum SentryLogLevel level;
 /// The main log message content
@@ -2518,6 +2632,20 @@ SWIFT_CLASS("_TtC6Sentry25SentryNSURLRequestBuilder")
 - (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
 @end
 
+/// The Telemetry processor is sitting between the client and transport to efficiently deliver telemetry to Sentry (as of 2026-02-04).
+/// Currently used for logs and metrics only; planned to cover all telemetry with buffering, rate limiting, client reports, and priority-based sending.
+/// Offline caching is still handled by the transport today, but the long-term goal is to move it here so the transport focuses on sending only.
+/// This is an Objective-C compatible subset of the telemetry processor protocol.
+/// Use <code>SentryTelemetryProcessor</code> instead when working in Swift, which adds support for
+/// Swift-only types like <code>SentryMetric</code>.
+/// See dev docs for details (work in progress): https://develop.sentry.dev/sdk/telemetry/telemetry-processor/
+SWIFT_PROTOCOL("_TtP6Sentry28SentryObjCTelemetryProcessor_")
+@protocol SentryObjCTelemetryProcessor
+- (void)addLog:(SentryLog * _Nonnull)log;
+/// Forwards buffered telemetry data to the transport for sending.
+- (NSTimeInterval)forwardTelemetryData SWIFT_WARN_UNUSED_RESULT;
+@end
+
 @class UIImage;
 @class SentryVideoInfo;
 SWIFT_PROTOCOL("_TtP6Sentry22SentryReplayVideoMaker_")
@@ -2653,7 +2781,6 @@ typedef SWIFT_ENUM(NSInteger, SentryProfileLifecycle, open) {
 };
 
 @class SentryTraceHeader;
-@class SentrySpanId;
 SWIFT_CLASS("_TtC6Sentry24SentryPropagationContext")
 @interface SentryPropagationContext : NSObject
 @property (nonatomic, readonly, strong) SentryId * _Nonnull traceId;
@@ -3247,8 +3374,18 @@ SWIFT_CLASS_PROPERTY(@property (nonatomic, class, readonly, strong) SentryFeedba
 ///
 + (void)configureScope:(void (^ _Nonnull)(SentryScope * _Nonnull))callback;
 /// Checks if the last program execution terminated with a crash.
-SWIFT_CLASS_PROPERTY(@property (nonatomic, class, readonly) BOOL crashedLastRun;)
+/// warning:
+/// This property returns <code>false</code> both when the app did not crash <em>and</em> when
+/// the crash status is not yet known (before the SDK finishes initialization). Use
+/// <code>lastRunStatus</code> instead, which distinguishes between these cases.
+SWIFT_CLASS_PROPERTY(@property (nonatomic, class, readonly) BOOL crashedLastRun SWIFT_DEPRECATED_MSG("Use lastRunStatus instead, which distinguishes between 'did not crash' and 'unknown'.");)
 + (BOOL)crashedLastRun SWIFT_WARN_UNUSED_RESULT;
+/// Returns the crash status of the last program execution.
+/// Before <code>SentrySDK/start(configureOptions:)</code> finishes initializing the crash reporter,
+/// this property returns <code>SentryLastRunStatus/unknown</code>. After initialization it returns
+/// either <code>SentryLastRunStatus/didCrash</code> or <code>SentryLastRunStatus/didNotCrash</code>.
+SWIFT_CLASS_PROPERTY(@property (nonatomic, class, readonly) enum SentryLastRunStatus lastRunStatus;)
++ (enum SentryLastRunStatus)lastRunStatus SWIFT_WARN_UNUSED_RESULT;
 /// Checks if the SDK detected a start-up crash during SDK initialization.
 /// note:
 /// The SDK init waits synchronously for up to 5 seconds to flush out events if the app crashes
@@ -3368,6 +3505,14 @@ SWIFT_CLASS("_TtC6Sentry12SentrySDKLog")
 /// @return @c YES if the current logging configuration will log statements at the current level,
 /// @c NO if not.
 + (BOOL)willLogAtLevel:(SentryLevel)level SWIFT_WARN_UNUSED_RESULT;
+/// Sets a custom log output handler. This allows hybrid SDKs (React Native, Flutter, etc.)
+/// to intercept SDK log messages and forward them to their respective consoles.
+/// note:
+/// Exposed through <code>PrivateSentrySDKOnly.setLogOutput</code> for hybrid SDK consumption.
+/// \param output A closure to handle log output. If <code>nil</code> is passed (which can happen
+/// from Objective-C callers despite nullability annotations), the default <code>print</code> handler is used.
+///
++ (void)setOutput:(void (^ _Nullable)(NSString * _Nonnull))output;
 - (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
 @end
 
@@ -3383,6 +3528,17 @@ SWIFT_CLASS("_TtC6Sentry34SentrySRDefaultBreadcrumbConverter")
 /// Any deviation in the information will cause the breadcrumb or the information itself to be discarded
 /// in order to avoid unknown behavior in the front-end.
 - (id <SentryRRWebEvent> _Nullable)convertFrom:(SentryBreadcrumb * _Nonnull)breadcrumb SWIFT_WARN_UNUSED_RESULT;
+- (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
+@end
+
+/// A storage class to hold the data associated with a single profiler sample.
+SWIFT_CLASS("_TtC6Sentry12SentrySample")
+@interface SentrySample : NSObject
+@property (nonatomic) uint64_t absoluteTimestamp;
+@property (nonatomic) NSTimeInterval absoluteNSDateInterval;
+@property (nonatomic, strong) NSNumber * _Nonnull stackIndex;
+@property (nonatomic) uint64_t threadID;
+@property (nonatomic, copy) NSString * _Nullable queueAddress;
 - (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
 @end
 
@@ -3637,6 +3793,27 @@ SWIFT_CLASS_PROPERTY(@property (nonatomic, class, readonly, copy) NSString * _No
 + (nonnull instancetype)new SWIFT_UNAVAILABLE_MSG("-init is unavailable");
 @end
 
+/// Detects shake gestures by swizzling <code>UIWindow.motionEnded(_:with:)</code> on iOS/iPadOS.
+/// When a shake gesture is detected, posts a <code>.SentryShakeDetected</code> notification.
+/// Use <code>enable()</code> to start detection and <code>disable()</code> to stop it.
+/// Swizzling is performed at most once regardless of how many times <code>enable()</code> is called.
+/// On non-iOS platforms (macOS, tvOS, watchOS), these methods are no-ops.
+SWIFT_CLASS_NAMED("SentryShakeDetector")
+@interface SentryShakeDetector : NSObject
+/// The notification name posted on shake, exposed for ObjC consumers.
+/// In Swift, prefer using <code>.SentryShakeDetected</code> on <code>NSNotification.Name</code> directly.
+SWIFT_CLASS_PROPERTY(@property (nonatomic, class, readonly) NSNotificationName _Nonnull shakeDetectedNotification;)
++ (NSNotificationName _Nonnull)shakeDetectedNotification SWIFT_WARN_UNUSED_RESULT;
+/// Enables shake gesture detection. On iOS/iPadOS, swizzles <code>UIWindow.motionEnded(_:with:)</code>
+/// the first time it is called, and from then on posts <code>.SentryShakeDetected</code>
+/// whenever a shake is detected. No-op on non-iOS platforms.
++ (void)enable;
+/// Disables shake gesture detection. Does not un-swizzle <code>UIWindow</code>; it only suppresses
+/// the notification so the overhead is negligible. No-op on non-iOS platforms.
++ (void)disable;
+- (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
+@end
+
 SWIFT_CLASS("_TtC6Sentry31SentrySwiftIntegrationInstaller")
 @interface SentrySwiftIntegrationInstaller : NSObject
 + (void)installWith:(SentryOptions * _Nonnull)options;
@@ -3686,18 +3863,6 @@ SWIFT_CLASS("_TtC6Sentry12SentrySysctl")
 - (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
 @end
 
-/// The Telemetry processor is sitting between the client and transport to efficiently deliver telemetry to Sentry (as of 2026-02-04).
-/// Currently used for logs only; planned to cover all telemetry (e.g. metrics) with buffering, rate limiting, client reports, and priority-based sending.
-/// Offline caching is still handled by the transport today, but the long-term goal is to move it here so the transport focuses on sending only.
-/// See dev docs for details (work in progress): https://develop.sentry.dev/sdk/telemetry/telemetry-processor/
-SWIFT_PROTOCOL("_TtP6Sentry24SentryTelemetryProcessor_")
-@protocol SentryTelemetryProcessor
-- (void)addLog:(SentryLog * _Nonnull)log;
-/// Forwards buffered telemetry data to the transport for sending.
-/// Temporary name; will be renamed to <code>flush()</code> once flushing logic moves from SentryMetricsIntegration.
-- (NSTimeInterval)forwardTelemetryData SWIFT_WARN_UNUSED_RESULT;
-@end
-
 @protocol SentryTelemetryProcessorTransport;
 /// Factory for creating telemetry processors.
 /// Unlike integrations (e.g., <code>SentryMetricsIntegration</code>), this factory cannot yet use the full dependency injection pattern
@@ -3719,7 +3884,7 @@ SWIFT_PROTOCOL("_TtP6Sentry24SentryTelemetryProcessor_")
 /// \endcodeThe internal method is already structured to make this transition straightforward.
 SWIFT_CLASS("_TtC6Sentry31SentryTelemetryProcessorFactory")
 @interface SentryTelemetryProcessorFactory : NSObject
-+ (id <SentryTelemetryProcessor> _Nonnull)getProcessorWithTransport:(id <SentryTelemetryProcessorTransport> _Nonnull)transport dependencies:(SentryDependencyContainer * _Nonnull)dependencies SWIFT_WARN_UNUSED_RESULT;
++ (id <SentryObjCTelemetryProcessor> _Nonnull)getProcessorWithTransport:(id <SentryTelemetryProcessorTransport> _Nonnull)transport dependencies:(SentryDependencyContainer * _Nonnull)dependencies SWIFT_WARN_UNUSED_RESULT;
 - (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
 @end
 
@@ -4752,7 +4917,6 @@ SWIFT_CLASS_NAMED("DefaultRateLimits")
 @class SentrySessionReplayEnvironmentChecker;
 @class SentryDispatchQueueWrapper;
 @protocol SentryNSNotificationCenterWrapper;
-@class SentryCrashWrapper;
 @class SentryBinaryImageCache;
 @class SentryDebugImageProvider;
 @class SentrySysctl;
@@ -4774,8 +4938,6 @@ SWIFT_CLASS_PROPERTY(@property (nonatomic, class, readonly, strong) SentryDispat
 + (SentryDispatchQueueWrapper * _Nonnull)dispatchQueueWrapper SWIFT_WARN_UNUSED_RESULT;
 SWIFT_CLASS_PROPERTY(@property (nonatomic, class, readonly, strong) id <SentryNSNotificationCenterWrapper> _Nonnull notificationCenterWrapper;)
 + (id <SentryNSNotificationCenterWrapper> _Nonnull)notificationCenterWrapper SWIFT_WARN_UNUSED_RESULT;
-SWIFT_CLASS_PROPERTY(@property (nonatomic, class, readonly, strong) SentryCrashWrapper * _Nonnull crashWrapper;)
-+ (SentryCrashWrapper * _Nonnull)crashWrapper SWIFT_WARN_UNUSED_RESULT;
 SWIFT_CLASS_PROPERTY(@property (nonatomic, class, readonly, strong) SentryBinaryImageCache * _Nonnull binaryImageCache;)
 + (SentryBinaryImageCache * _Nonnull)binaryImageCache SWIFT_WARN_UNUSED_RESULT;
 SWIFT_CLASS_PROPERTY(@property (nonatomic, class, readonly, strong) SentryDebugImageProvider * _Nonnull debugImageProvider;)
@@ -4839,6 +5001,7 @@ SWIFT_PROTOCOL("_TtP6Sentry33SentryNSNotificationCenterWrapper_")
 
 @class SentryDsn;
 @class SentryLog;
+enum SentryLastRunStatus : NSInteger;
 @class SentryScope;
 @class SentryViewScreenshotOptions;
 @class SentryReplayOptions;
@@ -4935,7 +5098,28 @@ SWIFT_CLASS_NAMED("Options")
 /// if you prefer a callback for every event.
 /// @warning It is not guaranteed that this is called on the main thread.
 /// @note Crash reporting is automatically disabled if a debugger is attached.
-@property (nonatomic, copy) SentryOnCrashedLastRunCallback _Nullable onCrashedLastRun;
+@property (nonatomic, copy) SentryOnCrashedLastRunCallback _Nullable onCrashedLastRun SWIFT_DEPRECATED_MSG("Use onLastRunStatusDetermined instead, which is called regardless of whether the app crashed.");
+/// A block called shortly after the initialization of the SDK when the crash status of the
+/// last program execution has been determined.
+/// This callback is invoked regardless of whether the app crashed or not:
+/// <ul>
+///   <li>
+///     If the last run ended with a crash, <code>status</code> is <code>SentryLastRunStatus/didCrash</code> and
+///     <code>crashEvent</code> contains the crash event.
+///   </li>
+///   <li>
+///     If the last run did <em>not</em> end with a crash, <code>status</code> is
+///     <code>SentryLastRunStatus/didNotCrash</code> and <code>crashEvent</code> is <code>nil</code>.
+///   </li>
+/// </ul>
+/// This callback is only executed once per <code>SentrySDK/start(configureOptions:)</code> lifecycle.
+/// warning:
+/// It is not guaranteed that this is called on the main thread.
+/// note:
+/// Crashes that occur while a debugger is attached are not recorded.
+/// In that case, the callback reports <code>SentryLastRunStatus/didNotCrash</code>
+/// even though the app did crash.
+@property (nonatomic, copy) void (^ _Nullable onLastRunStatusDetermined)(enum SentryLastRunStatus, SentryEvent * _Nullable);
 /// Indicates the percentage of events being sent to Sentry.
 /// @discussion Specifying 0 discards all events, 1.0 or nil sends all events, 0.01 collects 1% of
 /// all events.
@@ -5678,6 +5862,77 @@ SWIFT_CLASS("_TtC6Sentry18SentryClientReport")
 + (nonnull instancetype)new SWIFT_UNAVAILABLE_MSG("-init is unavailable");
 @end
 
+@class SentryCrashSwift;
+/// Facade that bridges the Sentry SDK layer to the SentryCrash subsystem.
+/// <code>SentryCrashBridge</code> is the single entry point through which SentryCrash
+/// accesses SDK services. It replaces direct <code>SentryDependencyContainer</code>
+/// look-ups inside the crash reporter, keeping the dependency direction
+/// one-way: <em>Sentry → SentryCrash</em>, never the reverse.
+/// <h2>Isolation boundary</h2>
+/// This bridge is the first step toward fully isolating SentryCrash from the
+/// SDK. Today the two layers still share a handful of model types (e.g.
+/// <code>SentryCrashSwift</code>, notification-center wrappers). Future work will replace
+/// those shared types with protocol abstractions so that SentryCrash can be
+/// built and tested independently.
+/// <h2>Exposed services</h2>
+/// | Service                        | Used by SentryCrash for                                 |
+/// |––––––––––––––––|———————————————————|
+/// | <code>notificationCenterWrapper</code>    | Observing app-lifecycle events (foreground, background)  |
+/// | <code>dateProvider</code>                 | Timestamping crash reports and session boundaries        |
+/// | <code>crashReporter</code>                | Reading system info, crash state, and launch metadata    |
+/// | <code>uncaughtExceptionHandler</code>     | Installing / reading the NSException handler             |
+/// | <code>activeScreenSize()</code> (UIKit)   | Recording screen dimensions in device context            |
+/// <h2>Threading</h2>
+/// The bridge is created once during <code>SentryCrashIntegration.install(with:)</code> and
+/// is safe to read from any thread after initialization. The
+/// <code>uncaughtExceptionHandler</code> property may be written from the SentryCrash
+/// installation path and read from the crash-time exception handler.
+/// <h2>Usage</h2>
+/// The bridge is created by the integration layer and passed down:
+/// \code
+/// let bridge = SentryCrashBridge(
+///     notificationCenterWrapper: notificationCenter,
+///     dateProvider: dateProvider,
+///     crashReporter: crashReporter
+/// )
+/// // Passed to SentryCrashWrapper, SentryCrashIntegrationSessionHandler,
+/// // and the underlying SentryCrash / SentryCrashInstallation instances.
+///
+/// \endcode
+SWIFT_CLASS("_TtC6Sentry17SentryCrashBridge")
+@interface SentryCrashBridge : NSObject
+/// Wrapper around <code>NSNotificationCenter</code> used by SentryCrash to observe
+/// app-lifecycle transitions (e.g. <code>UIApplicationDidBecomeActiveNotification</code>).
+@property (nonatomic, readonly, strong) id <SentryNSNotificationCenterWrapper> _Nonnull notificationCenterWrapper;
+/// Provides the current date/time. Used for timestamping crash reports and
+/// computing session durations.
+@property (nonatomic, readonly, strong) id <SentryCurrentDateProvider> _Nonnull dateProvider;
+/// The crash reporter instance that owns system info, crash state, and the
+/// on-disk report store. This is the main object SentryCrash interacts with.
+@property (nonatomic, readonly, strong) SentryCrashSwift * _Nonnull crashReporter;
+/// The C-convention uncaught-exception handler installed by SentryCrash.
+/// This is a convenience proxy for <code>crashReporter.uncaughtExceptionHandler</code>.
+/// The NSException monitor (<code>SentryCrashMonitor_NSException</code>) writes this
+/// during installation so it can be restored if monitoring is later disabled.
+@property (nonatomic) void (* _Nullable uncaughtExceptionHandler)(NSException * _Nonnull);
+/// Returns the size of the active screen in points (iOS/tvOS only).
+/// Delegates to <code>SentryDependencyContainerSwiftHelper</code> which reads the key
+/// window’s scene. Returns <code>CGSize.zero</code> when no active scene is available.
+- (CGSize)activeScreenSize SWIFT_WARN_UNUSED_RESULT;
+/// Creates a bridge with the SDK services that SentryCrash requires.
+/// \param notificationCenterWrapper Wrapper for subscribing to app-lifecycle
+/// notifications.
+///
+/// \param dateProvider Provider for current timestamps.
+///
+/// \param crashReporter The crash reporter that manages on-disk reports and
+/// system info.
+///
+- (nonnull instancetype)initWithNotificationCenterWrapper:(id <SentryNSNotificationCenterWrapper> _Nonnull)notificationCenterWrapper dateProvider:(id <SentryCurrentDateProvider> _Nonnull)dateProvider crashReporter:(SentryCrashSwift * _Nonnull)crashReporter OBJC_DESIGNATED_INITIALIZER;
+- (nonnull instancetype)init SWIFT_UNAVAILABLE;
++ (nonnull instancetype)new SWIFT_UNAVAILABLE_MSG("-init is unavailable");
+@end
+
 SWIFT_CLASS("_TtC6Sentry28SentryCrashReportFilterSwift")
 @interface SentryCrashReportFilterSwift : NSObject
 - (nonnull instancetype)initWithFilterReports:(void (^ _Nonnull)(NSArray * _Nonnull, void (^ _Nonnull)(NSArray * _Nullable, BOOL, NSError * _Nullable)))filter OBJC_DESIGNATED_INITIALIZER;
@@ -5693,6 +5948,7 @@ SWIFT_CLASS("_TtC6Sentry16SentryCrashSwift")
 - (void)setupOnCrash;
 - (void)removeOnCrash;
 @property (nonatomic) void (* _Nullable uncaughtExceptionHandler)(NSException * _Nonnull);
+- (void)setBridge:(SentryCrashBridge * _Nonnull)bridge;
 @property (nonatomic, copy) NSString * _Nonnull basePath;
 - (void)install;
 - (void)uninstall;
@@ -5708,7 +5964,7 @@ SWIFT_CLASS("_TtC6Sentry16SentryCrashSwift")
 SWIFT_CLASS("_TtC6Sentry18SentryCrashWrapper")
 @interface SentryCrashWrapper : NSObject
 @property (nonatomic, readonly, copy) NSDictionary<NSString *, id> * _Nonnull systemInfo;
-- (nonnull instancetype)initWithProcessInfoWrapper:(id <SentryProcessInfoSource> _Nonnull)processInfoWrapper OBJC_DESIGNATED_INITIALIZER;
+- (nonnull instancetype)initWithProcessInfoWrapper:(id <SentryProcessInfoSource> _Nonnull)processInfoWrapper bridge:(SentryCrashBridge * _Nonnull)bridge OBJC_DESIGNATED_INITIALIZER;
 - (nonnull instancetype)init SWIFT_UNAVAILABLE;
 + (nonnull instancetype)new SWIFT_UNAVAILABLE_MSG("-init is unavailable");
 @end
@@ -6165,6 +6421,8 @@ SWIFT_CLASS("_TtC6Sentry25SentryExperimentalOptions")
 /// API, which allows you to send, view and query counters, gauges and measurements.
 /// @note Default value is @c true.
 @property (nonatomic) BOOL enableMetrics;
+/// When enabled, the SDK uses a more efficient mechanism for detecting watchdog terminations.
+@property (nonatomic) BOOL enableWatchdogTerminationsV2;
 - (void)validateOptions:(NSDictionary<NSString *, id> * _Nullable)options;
 - (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
 @end
@@ -6216,12 +6474,12 @@ typedef SWIFT_ENUM(NSInteger, SentryFeedbackSource, open) {
 @end
 
 @interface SentryFeedback (SWIFT_EXTENSION(Sentry))
-- (NSDictionary<NSString *, id> * _Nonnull)serialize SWIFT_WARN_UNUSED_RESULT;
+/// Returns all attachments for inclusion in the feedback envelope.
+- (NSArray<SentryAttachment *> * _Nonnull)attachmentsForEnvelope SWIFT_WARN_UNUSED_RESULT;
 @end
 
 @interface SentryFeedback (SWIFT_EXTENSION(Sentry))
-/// Returns all attachments for inclusion in the feedback envelope.
-- (NSArray<SentryAttachment *> * _Nonnull)attachmentsForEnvelope SWIFT_WARN_UNUSED_RESULT;
+- (NSDictionary<NSString *, id> * _Nonnull)serialize SWIFT_WARN_UNUSED_RESULT;
 @end
 
 /// API for interacting with the feature User Feedback
@@ -6691,6 +6949,24 @@ SWIFT_PROTOCOL("_TtP6Sentry25SentryIntegrationProtocol_")
 - (void)uninstall;
 @end
 
+/// Represents the crash status of the last program execution.
+/// Use <code>SentrySDK/lastRunStatus</code> to check if the previous app execution
+/// terminated with a crash. Before the SDK is fully initialized, the status
+/// is <code>unknown</code> because the crash reporter hasn’t loaded its state yet.
+/// note:
+/// This enum replaces the <code>crashedLastRun</code> boolean property, which
+/// could not distinguish between “did not crash” and “not yet known.”
+typedef SWIFT_ENUM(NSInteger, SentryLastRunStatus, open) {
+/// The SDK hasn’t determined the crash status yet.
+/// This is the value returned before <code>SentrySDK/start(configureOptions:)</code>
+/// finishes initializing the crash reporter.
+  SentryLastRunStatusUnknown = 0,
+/// The last program execution did <em>not</em> end with a crash.
+  SentryLastRunStatusDidNotCrash = 1,
+/// The last program execution ended with a crash.
+  SentryLastRunStatusDidCrash = 2,
+};
+
 SWIFT_CLASS("_TtC6Sentry17SentryLevelHelper")
 @interface SentryLevelHelper : NSObject
 + (NSString * _Nonnull)nameForLevel:(SentryLevel)level SWIFT_WARN_UNUSED_RESULT;
@@ -6714,6 +6990,7 @@ SWIFT_CLASS("_TtC6Sentry12SentryLocale")
 - (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
 @end
 
+@class SentrySpanId;
 enum SentryLogLevel : NSInteger;
 /// A structured log entry that captures log data with associated attribute metadata.
 /// Use the <code>options.beforeSendLog</code> callback to modify or filter log data.
@@ -6723,6 +7000,8 @@ SWIFT_CLASS("_TtC6Sentry9SentryLog")
 @property (nonatomic, copy) NSDate * _Nonnull timestamp;
 /// The trace ID to associate this log with distributed tracing. This will be set to a valid non-empty value during processing.
 @property (nonatomic, strong) SentryId * _Nonnull traceId;
+/// The span ID of the span that was active when the log was collected.
+@property (nonatomic, strong) SentrySpanId * _Nullable spanId;
 /// The severity level of the log entry
 @property (nonatomic) enum SentryLogLevel level;
 /// The main log message content
@@ -6916,6 +7195,20 @@ SWIFT_CLASS("_TtC6Sentry25SentryNSURLRequestBuilder")
 - (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
 @end
 
+/// The Telemetry processor is sitting between the client and transport to efficiently deliver telemetry to Sentry (as of 2026-02-04).
+/// Currently used for logs and metrics only; planned to cover all telemetry with buffering, rate limiting, client reports, and priority-based sending.
+/// Offline caching is still handled by the transport today, but the long-term goal is to move it here so the transport focuses on sending only.
+/// This is an Objective-C compatible subset of the telemetry processor protocol.
+/// Use <code>SentryTelemetryProcessor</code> instead when working in Swift, which adds support for
+/// Swift-only types like <code>SentryMetric</code>.
+/// See dev docs for details (work in progress): https://develop.sentry.dev/sdk/telemetry/telemetry-processor/
+SWIFT_PROTOCOL("_TtP6Sentry28SentryObjCTelemetryProcessor_")
+@protocol SentryObjCTelemetryProcessor
+- (void)addLog:(SentryLog * _Nonnull)log;
+/// Forwards buffered telemetry data to the transport for sending.
+- (NSTimeInterval)forwardTelemetryData SWIFT_WARN_UNUSED_RESULT;
+@end
+
 @class UIImage;
 @class SentryVideoInfo;
 SWIFT_PROTOCOL("_TtP6Sentry22SentryReplayVideoMaker_")
@@ -7051,7 +7344,6 @@ typedef SWIFT_ENUM(NSInteger, SentryProfileLifecycle, open) {
 };
 
 @class SentryTraceHeader;
-@class SentrySpanId;
 SWIFT_CLASS("_TtC6Sentry24SentryPropagationContext")
 @interface SentryPropagationContext : NSObject
 @property (nonatomic, readonly, strong) SentryId * _Nonnull traceId;
@@ -7645,8 +7937,18 @@ SWIFT_CLASS_PROPERTY(@property (nonatomic, class, readonly, strong) SentryFeedba
 ///
 + (void)configureScope:(void (^ _Nonnull)(SentryScope * _Nonnull))callback;
 /// Checks if the last program execution terminated with a crash.
-SWIFT_CLASS_PROPERTY(@property (nonatomic, class, readonly) BOOL crashedLastRun;)
+/// warning:
+/// This property returns <code>false</code> both when the app did not crash <em>and</em> when
+/// the crash status is not yet known (before the SDK finishes initialization). Use
+/// <code>lastRunStatus</code> instead, which distinguishes between these cases.
+SWIFT_CLASS_PROPERTY(@property (nonatomic, class, readonly) BOOL crashedLastRun SWIFT_DEPRECATED_MSG("Use lastRunStatus instead, which distinguishes between 'did not crash' and 'unknown'.");)
 + (BOOL)crashedLastRun SWIFT_WARN_UNUSED_RESULT;
+/// Returns the crash status of the last program execution.
+/// Before <code>SentrySDK/start(configureOptions:)</code> finishes initializing the crash reporter,
+/// this property returns <code>SentryLastRunStatus/unknown</code>. After initialization it returns
+/// either <code>SentryLastRunStatus/didCrash</code> or <code>SentryLastRunStatus/didNotCrash</code>.
+SWIFT_CLASS_PROPERTY(@property (nonatomic, class, readonly) enum SentryLastRunStatus lastRunStatus;)
++ (enum SentryLastRunStatus)lastRunStatus SWIFT_WARN_UNUSED_RESULT;
 /// Checks if the SDK detected a start-up crash during SDK initialization.
 /// note:
 /// The SDK init waits synchronously for up to 5 seconds to flush out events if the app crashes
@@ -7766,6 +8068,14 @@ SWIFT_CLASS("_TtC6Sentry12SentrySDKLog")
 /// @return @c YES if the current logging configuration will log statements at the current level,
 /// @c NO if not.
 + (BOOL)willLogAtLevel:(SentryLevel)level SWIFT_WARN_UNUSED_RESULT;
+/// Sets a custom log output handler. This allows hybrid SDKs (React Native, Flutter, etc.)
+/// to intercept SDK log messages and forward them to their respective consoles.
+/// note:
+/// Exposed through <code>PrivateSentrySDKOnly.setLogOutput</code> for hybrid SDK consumption.
+/// \param output A closure to handle log output. If <code>nil</code> is passed (which can happen
+/// from Objective-C callers despite nullability annotations), the default <code>print</code> handler is used.
+///
++ (void)setOutput:(void (^ _Nullable)(NSString * _Nonnull))output;
 - (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
 @end
 
@@ -7781,6 +8091,17 @@ SWIFT_CLASS("_TtC6Sentry34SentrySRDefaultBreadcrumbConverter")
 /// Any deviation in the information will cause the breadcrumb or the information itself to be discarded
 /// in order to avoid unknown behavior in the front-end.
 - (id <SentryRRWebEvent> _Nullable)convertFrom:(SentryBreadcrumb * _Nonnull)breadcrumb SWIFT_WARN_UNUSED_RESULT;
+- (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
+@end
+
+/// A storage class to hold the data associated with a single profiler sample.
+SWIFT_CLASS("_TtC6Sentry12SentrySample")
+@interface SentrySample : NSObject
+@property (nonatomic) uint64_t absoluteTimestamp;
+@property (nonatomic) NSTimeInterval absoluteNSDateInterval;
+@property (nonatomic, strong) NSNumber * _Nonnull stackIndex;
+@property (nonatomic) uint64_t threadID;
+@property (nonatomic, copy) NSString * _Nullable queueAddress;
 - (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
 @end
 
@@ -8035,6 +8356,27 @@ SWIFT_CLASS_PROPERTY(@property (nonatomic, class, readonly, copy) NSString * _No
 + (nonnull instancetype)new SWIFT_UNAVAILABLE_MSG("-init is unavailable");
 @end
 
+/// Detects shake gestures by swizzling <code>UIWindow.motionEnded(_:with:)</code> on iOS/iPadOS.
+/// When a shake gesture is detected, posts a <code>.SentryShakeDetected</code> notification.
+/// Use <code>enable()</code> to start detection and <code>disable()</code> to stop it.
+/// Swizzling is performed at most once regardless of how many times <code>enable()</code> is called.
+/// On non-iOS platforms (macOS, tvOS, watchOS), these methods are no-ops.
+SWIFT_CLASS_NAMED("SentryShakeDetector")
+@interface SentryShakeDetector : NSObject
+/// The notification name posted on shake, exposed for ObjC consumers.
+/// In Swift, prefer using <code>.SentryShakeDetected</code> on <code>NSNotification.Name</code> directly.
+SWIFT_CLASS_PROPERTY(@property (nonatomic, class, readonly) NSNotificationName _Nonnull shakeDetectedNotification;)
++ (NSNotificationName _Nonnull)shakeDetectedNotification SWIFT_WARN_UNUSED_RESULT;
+/// Enables shake gesture detection. On iOS/iPadOS, swizzles <code>UIWindow.motionEnded(_:with:)</code>
+/// the first time it is called, and from then on posts <code>.SentryShakeDetected</code>
+/// whenever a shake is detected. No-op on non-iOS platforms.
++ (void)enable;
+/// Disables shake gesture detection. Does not un-swizzle <code>UIWindow</code>; it only suppresses
+/// the notification so the overhead is negligible. No-op on non-iOS platforms.
++ (void)disable;
+- (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
+@end
+
 SWIFT_CLASS("_TtC6Sentry31SentrySwiftIntegrationInstaller")
 @interface SentrySwiftIntegrationInstaller : NSObject
 + (void)installWith:(SentryOptions * _Nonnull)options;
@@ -8084,18 +8426,6 @@ SWIFT_CLASS("_TtC6Sentry12SentrySysctl")
 - (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
 @end
 
-/// The Telemetry processor is sitting between the client and transport to efficiently deliver telemetry to Sentry (as of 2026-02-04).
-/// Currently used for logs only; planned to cover all telemetry (e.g. metrics) with buffering, rate limiting, client reports, and priority-based sending.
-/// Offline caching is still handled by the transport today, but the long-term goal is to move it here so the transport focuses on sending only.
-/// See dev docs for details (work in progress): https://develop.sentry.dev/sdk/telemetry/telemetry-processor/
-SWIFT_PROTOCOL("_TtP6Sentry24SentryTelemetryProcessor_")
-@protocol SentryTelemetryProcessor
-- (void)addLog:(SentryLog * _Nonnull)log;
-/// Forwards buffered telemetry data to the transport for sending.
-/// Temporary name; will be renamed to <code>flush()</code> once flushing logic moves from SentryMetricsIntegration.
-- (NSTimeInterval)forwardTelemetryData SWIFT_WARN_UNUSED_RESULT;
-@end
-
 @protocol SentryTelemetryProcessorTransport;
 /// Factory for creating telemetry processors.
 /// Unlike integrations (e.g., <code>SentryMetricsIntegration</code>), this factory cannot yet use the full dependency injection pattern
@@ -8117,7 +8447,7 @@ SWIFT_PROTOCOL("_TtP6Sentry24SentryTelemetryProcessor_")
 /// \endcodeThe internal method is already structured to make this transition straightforward.
 SWIFT_CLASS("_TtC6Sentry31SentryTelemetryProcessorFactory")
 @interface SentryTelemetryProcessorFactory : NSObject
-+ (id <SentryTelemetryProcessor> _Nonnull)getProcessorWithTransport:(id <SentryTelemetryProcessorTransport> _Nonnull)transport dependencies:(SentryDependencyContainer * _Nonnull)dependencies SWIFT_WARN_UNUSED_RESULT;
++ (id <SentryObjCTelemetryProcessor> _Nonnull)getProcessorWithTransport:(id <SentryTelemetryProcessorTransport> _Nonnull)transport dependencies:(SentryDependencyContainer * _Nonnull)dependencies SWIFT_WARN_UNUSED_RESULT;
 - (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
 @end
 

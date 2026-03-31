@@ -40,6 +40,7 @@ import io.sentry.SentryLogEventAttributeValue;
 import io.sentry.logger.SentryLogParameters;
 import io.sentry.SentryLogLevel;
 import io.sentry.SentryMetricsEvent;
+import io.sentry.JsonUnknown;
 import io.sentry.metrics.SentryMetricsParameters;
 
 public class SentryBridgeJava {
@@ -111,13 +112,14 @@ public class SentryBridgeJava {
 							}
 						});
 					}
+					String deviceType = settingJson.optString("deviceType", "");
 					if (settingJson.has("beforeSendHandler")) {
 						options.setBeforeSend(new SentryUnrealBeforeSendCallback(
-								settingJson.getBoolean("enableAutoLogAttachment"), settingJson.getBoolean("attachScreenshot"), settingJson.getLong("beforeSendHandler")));
+								settingJson.getBoolean("enableAutoLogAttachment"), settingJson.getBoolean("attachScreenshot"), settingJson.getLong("beforeSendHandler"), deviceType));
 					}
 					else {
 						options.setBeforeSend(new SentryUnrealBeforeSendCallback(
-								settingJson.getBoolean("enableAutoLogAttachment"), settingJson.getBoolean("attachScreenshot")));
+								settingJson.getBoolean("enableAutoLogAttachment"), settingJson.getBoolean("attachScreenshot"), deviceType));
 					}
 
 					if (settingJson.has("beforeLogHandler")) {
@@ -210,6 +212,14 @@ public class SentryBridgeJava {
 		});
 	}
 
+	public static void setAttribute(final String key, final Object value) {
+		Sentry.setAttribute(key, value);
+	}
+
+	public static void removeAttribute(final String key) {
+		Sentry.removeAttribute(key);
+	}
+
 	public static void setLevel(final SentryLevel level) {
 		Sentry.configureScope(new ScopeCallback() {
 			@Override
@@ -217,6 +227,16 @@ public class SentryBridgeJava {
 				scope.setLevel(level);
 			}
 		});
+	}
+
+	public static void setRelease(final String release) {
+		SentryOptions options = getOptions();
+		options.setRelease(release);
+	}
+
+	public static void setEnvironment(final String environment) {
+		SentryOptions options = getOptions();
+		options.setEnvironment(environment);
 	}
 
 	public static SentryOptions getOptions() {
@@ -252,6 +272,32 @@ public class SentryBridgeJava {
 
 	public static void removeContext(final SentryEvent event, final String key) {
 		event.getContexts().remove(key);
+	}
+
+	public static void mergeContext(final SentryEvent event, final String contextName, final Map<String, Object> values) {
+		Object existing = event.getContexts().get(contextName);
+		if (existing instanceof JsonUnknown) {
+			JsonUnknown jsonUnknown = (JsonUnknown) existing;
+			Map<String, Object> unknown = jsonUnknown.getUnknown();
+			if (unknown == null) {
+				unknown = new HashMap<>();
+			} else {
+				unknown = new HashMap<>(unknown);
+			}
+			unknown.putAll(values);
+			jsonUnknown.setUnknown(unknown);
+		} else if (existing instanceof Map<?, ?>) {
+			Map<String, Object> merged = new HashMap<>();
+			for (Map.Entry<?, ?> entry : ((Map<?, ?>) existing).entrySet()) {
+				if (entry.getKey() instanceof String) {
+					merged.put((String) entry.getKey(), entry.getValue());
+				}
+			}
+			merged.putAll(values);
+			event.getContexts().put(contextName, merged);
+		} else {
+			event.getContexts().put(contextName, new HashMap<>(values));
+		}
 	}
 
 	public static Object getScopeContext(final IScope scope, final String key) {
@@ -438,22 +484,29 @@ public class SentryBridgeJava {
 		private final boolean attachLog;
 		private final boolean attachScreenshot;
 		private final long beforeSendAddr;
+		private final String deviceType;
 
-		public SentryUnrealBeforeSendCallback(boolean attachLog, boolean attachScreenshot) {
+		public SentryUnrealBeforeSendCallback(boolean attachLog, boolean attachScreenshot, String deviceType) {
 			this.attachLog = attachLog;
 			this.attachScreenshot = attachScreenshot;
 			this.beforeSendAddr = 0;
+			this.deviceType = deviceType;
 		}
 
-		public SentryUnrealBeforeSendCallback(boolean attachLog, boolean attachScreenshot, long beforeSendAddr) {
+		public SentryUnrealBeforeSendCallback(boolean attachLog, boolean attachScreenshot, long beforeSendAddr, String deviceType) {
 			this.attachLog = attachLog;
 			this.attachScreenshot = attachScreenshot;
 			this.beforeSendAddr = beforeSendAddr;
+			this.deviceType = deviceType;
 		}
 
 		@Override
 		public SentryEvent execute(SentryEvent event, Hint hint) {
 			SentryOptions options = getOptions();
+
+			if (deviceType != null && !deviceType.isEmpty()) {
+				mergeContext(event, "device", Collections.singletonMap("device_type", deviceType));
+			}
 
 			if (attachLog) {
 				String logFilePath = getLogFilePath(event.isCrashed());

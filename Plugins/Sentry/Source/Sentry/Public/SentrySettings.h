@@ -214,6 +214,64 @@ struct FEnableBuildTargets
 	bool bEnableProgram = true;
 };
 
+USTRUCT(BlueprintType)
+struct FSentryCrashReporterAppearance
+{
+	GENERATED_BODY()
+
+	UPROPERTY(Config, EditAnywhere, Category = "General",
+		Meta = (InlineEditConditionToggle))
+	bool bOverrideWindowTitle = false;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General",
+		Meta = (DisplayName = "Window title", ToolTip = "Custom title for the crash reporter window.", EditCondition = "bOverrideWindowTitle"))
+	FString WindowTitle;
+
+	UPROPERTY(Config, EditAnywhere, Category = "General",
+		Meta = (InlineEditConditionToggle))
+	bool bOverrideHeaderText = false;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General",
+		Meta = (DisplayName = "Header text", ToolTip = "Header text shown in the crash reporter dialog.", EditCondition = "bOverrideHeaderText"))
+	FString HeaderText;
+
+	UPROPERTY(Config, EditAnywhere, Category = "General",
+		Meta = (InlineEditConditionToggle))
+	bool bOverrideHeaderDescription = false;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General",
+		Meta = (DisplayName = "Header description (leave empty to hide the text)", ToolTip = "Description text shown below the header. Leave empty to hide.", EditCondition = "bOverrideHeaderDescription"))
+	FString HeaderDescription;
+
+	UPROPERTY(Config, EditAnywhere, Category = "General",
+		Meta = (InlineEditConditionToggle))
+	bool bOverrideSubmitButtonLabel = false;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General",
+		Meta = (DisplayName = "Submit button label", ToolTip = "Label for the submit/send button.", EditCondition = "bOverrideSubmitButtonLabel"))
+	FString SubmitButtonLabel;
+
+	UPROPERTY(Config, EditAnywhere, Category = "General",
+		Meta = (InlineEditConditionToggle))
+	bool bOverrideCancelButtonLabel = false;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General",
+		Meta = (DisplayName = "Cancel button label (leave empty to hide the button)", ToolTip = "Label for the cancel button. Set to empty string to hide the button.", EditCondition = "bOverrideCancelButtonLabel"))
+	FString CancelButtonLabel;
+
+	UPROPERTY(Config, EditAnywhere, Category = "General",
+		Meta = (InlineEditConditionToggle))
+	bool bOverrideAccentColor = false;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General",
+		Meta = (DisplayName = "Accent color", ToolTip = "Primary accent color for the crash reporter UI. Alpha channel is ignored.", EditCondition = "bOverrideAccentColor"))
+	FColor AccentColor = FColor(0, 120, 212);
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General",
+		Meta = (DisplayName = "Window closable", ToolTip = "When disabled, the user cannot close the crash reporter window without submitting the report. The native close button is disabled and the cancel button is hidden."))
+	bool bWindowClosable = true;
+};
+
 /**
  * Sentry settings used for plugin configuration.
  */
@@ -290,6 +348,41 @@ class SENTRY_API USentrySettings : public UObject
 		Meta = (DisplayName = "Enable metrics", ToolTip = "Flag indicating whether to enable the Sentry metrics API for tracking counters, distributions, and gauges."))
 	bool EnableMetrics;
 
+	UPROPERTY(Config, EditAnywhere, Category = "General|Metrics|Experimental",
+		Meta = (DisplayName = "Collect frame time metrics", ToolTip = "Automatically collect frame time and per-thread performance metrics (frame duration, game thread, render thread, GPU, FPS). Requires metrics to be enabled.",
+			EditCondition = "EnableMetrics"))
+	bool EnableAutoFrameTimeMetrics;
+
+	UPROPERTY(Config, EditAnywhere, Category = "General|Metrics|Experimental",
+		Meta = (DisplayName = "Frame time sample interval (frames)", ToolTip = "Emit performance metrics every Nth frame. Higher values reduce network and storage overhead at the cost of granularity. At 60 FPS, a value of 30 emits ~2 samples per second.",
+			EditCondition = "EnableAutoFrameTimeMetrics && EnableMetrics", ClampMin = 1))
+	int32 FrameTimeSampleInterval;
+
+	UPROPERTY(Config, EditAnywhere, Category = "General|Metrics|Experimental",
+		Meta = (DisplayName = "Collect game stats metrics", ToolTip = "Periodically collect game stats (e.g., process memory usage, active UObject count). Requires metrics to be enabled.",
+			EditCondition = "EnableMetrics"))
+	bool EnableAutoGameStatsMetrics;
+
+	UPROPERTY(Config, EditAnywhere, Category = "General|Metrics|Experimental",
+		Meta = (DisplayName = "Game stats sample interval (seconds)", ToolTip = "How often to sample game stats metrics (memory, UObject count). Default: 60 seconds.",
+			EditCondition = "EnableAutoGameStatsMetrics && EnableMetrics", ClampMin = 1))
+	int32 GameStatsSampleInterval;
+
+	UPROPERTY(Config, EditAnywhere, Category = "General|Metrics|Experimental",
+		Meta = (DisplayName = "Collect GC pause metrics (UE 5.5+)", ToolTip = "Emit a metric for each garbage collection pause duration. GC pauses are a common source of hitches in Unreal Engine games. Requires Unreal Engine 5.5 or later.",
+			EditCondition = "EnableMetrics"))
+	bool EnableAutoGCMetrics;
+
+	UPROPERTY(Config, EditAnywhere, Category = "General|Metrics|Experimental",
+		Meta = (DisplayName = "Collect network metrics (UE 5.7+)", ToolTip = "Emit network performance metrics (ping, bandwidth, packet loss, jitter) during active multiplayer sessions. Only active when a network driver is present. Requires Unreal Engine 5.7 or later.",
+			EditCondition = "EnableMetrics"))
+	bool EnableAutoNetworkMetrics;
+
+	UPROPERTY(Config, EditAnywhere, Category = "General|Metrics|Experimental",
+		Meta = (DisplayName = "Network metrics sample interval (seconds)", ToolTip = "How often to sample network metrics. Default: 10 seconds.",
+			EditCondition = "EnableAutoNetworkMetrics && EnableMetrics", ClampMin = 1))
+	int32 NetworkMetricsSampleInterval;
+
 	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General|Breadcrumbs",
 		Meta = (DisplayName = "Max breadcrumbs", Tooltip = "Total amount of breadcrumbs that should be captured."))
 	int32 MaxBreadcrumbs;
@@ -318,14 +411,6 @@ class SENTRY_API USentrySettings : public UObject
 		Meta = (DisplayName = "Override release name", ToolTip = "Release name which will be used for enriching events.", EditCondition = "OverrideReleaseName"))
 	FString Release;
 
-	UPROPERTY(Config, EditAnywhere, Category = "General|Native",
-		Meta = (InlineEditConditionToggle))
-	bool UseProxy;
-
-	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General|Native",
-		Meta = (DisplayName = "HTTP proxy", ToolTip = "HTTP proxy through which requests can be tunneled to Sentry.", EditCondition = "UseProxy"))
-	FString ProxyUrl;
-
 	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General|Hooks",
 		Meta = (DisplayName = "Custom `beforeSend` event handler", ToolTip = "Custom handler for processing events before sending them to Sentry."))
 	TSubclassOf<USentryBeforeSendHandler> BeforeSendHandler;
@@ -347,11 +432,35 @@ class SENTRY_API USentrySettings : public UObject
 	bool EnableAutoCrashCapturing;
 
 	UPROPERTY(Config, EditAnywhere, Category = "General|Native",
+		Meta = (InlineEditConditionToggle))
+	bool UseProxy;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General|Native",
+		Meta = (DisplayName = "HTTP proxy", ToolTip = "HTTP proxy through which requests can be tunneled to Sentry.", EditCondition = "UseProxy"))
+	FString ProxyUrl;
+
+	UPROPERTY(Config, EditAnywhere, Category = "General|Native",
 		Meta = (DisplayName = "Sentry database location", ToolTip = "Location where Sentry stores its internal/temporary files."))
 	ESentryDatabaseLocation DatabaseLocation;
 
 	UPROPERTY(Config, EditAnywhere, Category = "General|Native",
-		Meta = (DisplayName = "Delay app shutdown until crash report uploaded (for Crashpad only)", ToolTip = "Flag indicating whether Crashpad should delay application shutdown until the upload of the crash report is completed. It is useful in Docker environment where the life cycle of all processes is bound by the root process."))
+		Meta = (DisplayName = "Use native crash backend (Experimental)", ToolTip = "Use the experimental native backend for crash reporting on Windows and Linux instead of the default Crashpad backend. Requires rebuild after changing.",
+			ConfigRestartRequired = true))
+	bool UseNativeBackend;
+
+	UPROPERTY(Config, EditAnywhere, Category = "General|Native",
+		Meta = (DisplayName = "Minidump capture mode", ToolTip = "Controls how much memory is captured in crash minidumps. Larger captures provide more debugging information but take longer to generate and upload.",
+			EditCondition = "UseNativeBackend"))
+	ESentryMinidumpMode MinidumpMode;
+
+	UPROPERTY(Config, EditAnywhere, Category = "General|Native",
+		Meta = (DisplayName = "Crash reporting mode", ToolTip = "Controls how crash data is collected and sent to Sentry. Minidump mode sends raw dumps for server-side symbolication. Native stackwalking performs client-side unwinding for faster, smaller payloads.",
+			EditCondition = "UseNativeBackend"))
+	ESentryCrashReportingMode CrashReportingMode;
+
+	UPROPERTY(Config, EditAnywhere, Category = "General|Native",
+		Meta = (DisplayName = "Delay app shutdown until crash report uploaded (for Crashpad only)", ToolTip = "Flag indicating whether Crashpad should delay application shutdown until the upload of the crash report is completed. It is useful in Docker environment where the life cycle of all processes is bound by the root process.",
+			EditCondition = "!UseNativeBackend"))
 	bool CrashpadWaitForUpload;
 
 	UPROPERTY(Config, EditAnywhere, Category = "General|Native",
@@ -362,6 +471,21 @@ class SENTRY_API USentrySettings : public UObject
 		Meta = (DisplayName = "Enable external crash reporter",
 			ToolTip = "When enabled, a crash reporter dialog is shown to the user after a crash, allowing them to provide feedback before submitting the crash report. Supported on Windows and Linux only."))
 	bool EnableExternalCrashReporter;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General|Native",
+		Meta = (DisplayName = "External crash reporter appearance", ToolTip = "Customize the appearance of the external crash reporter dialog.",
+			EditCondition = "EnableExternalCrashReporter"))
+	FSentryCrashReporterAppearance CrashReporterAppearance;
+
+	UPROPERTY(Config, EditAnywhere, Category = "General|Native",
+		Meta = (DisplayName = "Enable hang tracking",
+			ToolTip = "Track application hangs (unresponsive game thread) using Unreal Engine's built-in FThreadHeartBeat. Only effective in packaged builds."))
+	bool EnableHangTracking;
+
+	UPROPERTY(Config, EditAnywhere, Category = "General|Native",
+		Meta = (DisplayName = "Hang timeout (seconds)", ToolTip = "Duration in seconds that a thread must be unresponsive before a hang event is captured.",
+			EditCondition = "EnableHangTracking", ClampMin = 1.0f))
+	float HangTimeoutDuration;
 
 	UPROPERTY(Config, EditAnywhere, Category = "General|Offline caching",
 		Meta = (DisplayName = "Enable offline caching", ToolTip = "Enables persistent caching of envelopes to disk. When enabled, envelopes are stored in a cache directory and retained regardless of send success or failure. The cache is cleaned up on startup based on the limits configured below. Available on Windows, Linux and Xbox only. On Android and Apple caching is enabled by default."))
