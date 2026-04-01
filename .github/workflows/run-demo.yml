@@ -44,11 +44,21 @@ jobs:
             exit 1
           }
           
+          # Start a dummy spectator client in the background to emulate multiplayer setup required for network traffic generation
+          Write-Output "Starting spectator client..."
+          $client = Start-Process -FilePath $exePath -ArgumentList "-Unattended", "-nullrhi", "127.0.0.1:7777" -PassThru -NoNewWindow
+
+          # Run game as a listen server to which the spectator client can connect
           Write-Output "Running: $exePath -Unattended -nullrhi --idle"
-          $process = Start-Process -FilePath $exePath -ArgumentList "-Unattended", "-nullrhi", "--idle" -Wait -PassThru -NoNewWindow
-          $exitCode = $process.ExitCode
+          $server = Start-Process -FilePath $exePath -ArgumentList "-Unattended", "-nullrhi", "--idle", "/Game/Maps/Main?listen", "-port=7777" -Wait -PassThru -NoNewWindow
+          $exitCode = $server.ExitCode
           Write-Output "Process completed. Exit code: $exitCode"
-          
+
+          if (!$client.HasExited) {
+            Write-Output "Stopping spectator client..."
+            Stop-Process -Id $client.Id -Force -ErrorAction SilentlyContinue
+          }
+
           if ($exitCode -eq 0) {
             Write-Error "Expected non-zero exit code but got 0"
             exit 1
