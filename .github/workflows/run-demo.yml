@@ -46,7 +46,7 @@ jobs:
           
           # Start a dummy spectator client in the background to emulate multiplayer setup required for network traffic generation
           Write-Output "Starting spectator client..."
-          $client = Start-Process -FilePath $exePath -ArgumentList "-Unattended", "-nullrhi", "127.0.0.1:7777" -PassThru -NoNewWindow
+          $client = Start-Process -FilePath $exePath -ArgumentList "-Unattended", "-nullrhi", "127.0.0.1:7777" -PassThru -WindowStyle Hidden
 
           # Run game as a listen server to which the spectator client can connect
           Write-Output "Running: $exePath -Unattended -nullrhi --idle"
