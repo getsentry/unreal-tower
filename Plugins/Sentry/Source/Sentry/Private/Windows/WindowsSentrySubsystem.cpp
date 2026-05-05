@@ -2,7 +2,7 @@
 
 #include "WindowsSentrySubsystem.h"
 
-#if USE_SENTRY_NATIVE
+#if USE_SENTRY_NATIVE && !SENTRY_WINGDK
 
 #include "SentryDefines.h"
 #include "SentrySettings.h"
@@ -13,6 +13,8 @@
 
 void FWindowsSentrySubsystem::InitWithSettings(const USentrySettings* Settings, const FSentryCallbackHandlers& CallbackHandlers)
 {
+	bOutOfProcessScreenshots = Settings->EnableOutOfProcessScreenshots;
+
 	// Detect Wine/Proton before initializing
 	WineProtonInfo = FSentryPlatformDetectionUtils::DetectWineProton();
 
@@ -118,6 +120,15 @@ void FWindowsSentrySubsystem::ConfigureCrashReporterPath(sentry_options_t* Optio
 	sentry_options_set_external_crash_reporter_pathw(Options, *CrashReporterPath);
 }
 
+void FWindowsSentrySubsystem::ConfigureScreenshotCapturing(sentry_options_t* Options)
+{
+	if (bOutOfProcessScreenshots)
+	{
+		UE_LOG(LogSentrySdk, Log, TEXT("Native out-of-process screenshot capturing enabled"));
+		sentry_options_set_attach_screenshot(Options, 1);
+	}
+}
+
 sentry_value_t FWindowsSentrySubsystem::OnCrash(const sentry_ucontext_t* uctx, sentry_value_t event, void* closure)
 {
 	// Windows-specific crash handling can go here if needed in the future
@@ -135,4 +146,4 @@ FString FWindowsSentrySubsystem::GetDeviceType() const
 	return FMicrosoftSentrySubsystem::GetDeviceType();
 }
 
-#endif // USE_SENTRY_NATIVE
+#endif // USE_SENTRY_NATIVE && !SENTRY_WINGDK

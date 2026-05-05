@@ -113,15 +113,15 @@ struct FStructuredLoggingLevels
 
 	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General",
 		Meta = (DisplayName = "Fatal", ToolTip = "Flag indicating whether to forward Fatal log messages to Sentry structured logging."))
-	bool bOnFatalLog = true;
+	bool bOnFatalLog = false;
 
 	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General",
 		Meta = (DisplayName = "Error", ToolTip = "Flag indicating whether to forward Error log messages to Sentry structured logging."))
-	bool bOnErrorLog = true;
+	bool bOnErrorLog = false;
 
 	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General",
 		Meta = (DisplayName = "Warning", ToolTip = "Flag indicating whether to forward Warning log messages to Sentry structured logging."))
-	bool bOnWarningLog = true;
+	bool bOnWarningLog = false;
 
 	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General",
 		Meta = (DisplayName = "Display/Log", ToolTip = "Flag indicating whether to forward Display/Log messages to Sentry structured logging."))
@@ -215,6 +215,16 @@ struct FEnableBuildTargets
 };
 
 USTRUCT(BlueprintType)
+struct FSentryCrashReporterImagery
+{
+	GENERATED_BODY()
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General",
+		Meta = (DisplayName = "Override default app logo", ToolTip = "Replace the default crash reporter logo with a custom PNG image."))
+	bool bOverrideAppLogo = false;
+};
+
+USTRUCT(BlueprintType)
 struct FSentryCrashReporterAppearance
 {
 	GENERATED_BODY()
@@ -270,6 +280,10 @@ struct FSentryCrashReporterAppearance
 	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General",
 		Meta = (DisplayName = "Window closable", ToolTip = "When disabled, the user cannot close the crash reporter window without submitting the report. The native close button is disabled and the cancel button is hidden."))
 	bool bWindowClosable = true;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General",
+		Meta = (DisplayName = "App logo", ToolTip = "Replace the default crash reporter logo with a custom PNG image. The file is stored in Build/SentryCrashReporter/ under your project and staged alongside the plugin during packaging."))
+	FSentryCrashReporterImagery Imagery;
 };
 
 /**
@@ -321,12 +335,21 @@ class SENTRY_API USentrySettings : public UObject
 	bool AttachScreenshot;
 
 	UPROPERTY(Config, EditAnywhere, Category = "General|Attachments",
+		Meta = (DisplayName = "Enable out-of-process screenshot capturing (for Windows only, experimental)", ToolTip = "Flag indicating whether crash screenshots should be captured out-of-process by the native SDK using OS-level APIs instead of Unreal's Slate renderer. More reliable during crashes since it doesn't depend on the rendering pipeline being functional. Currently supported on Windows only. Requires `Attach screenshots` to be enabled.",
+			EditCondition = "AttachScreenshot"))
+	bool EnableOutOfProcessScreenshots;
+
+	UPROPERTY(Config, EditAnywhere, Category = "General|Attachments",
 		Meta = (DisplayName = "Attach GPU dump", ToolTip = "Flag indicating whether to attach GPU crash dump when an error occurs. Currently this feature is supported for Nvidia graphics only."))
 	bool AttachGpuDump;
 
 	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General|Attachments",
 		Meta = (DisplayName = "Max attachment size in bytes", Tooltip = "Max attachment size for each attachment in bytes. Default is 20 MiB compressed but this size is planned to be increased. Please also check the maximum attachment size of Relay to make sure your attachments don't get discarded there: https://docs.sentry.io/product/relay/options/"))
 	int32 MaxAttachmentSize;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General|Attachments",
+		Meta = (DisplayName = "Enable large attachments (for desktop and consoles only)", ToolTip = "When enabled, attachments above an internal size threshold are uploaded out-of-band via a separate request. When disabled, oversized attachments are rejected by Sentry. Currently supported on Windows, Linux, Mac (with native backend) and consoles."))
+	bool EnableLargeAttachments;
 
 	UPROPERTY(Config, EditAnywhere, Category = "General|Structured Logging",
 		Meta = (DisplayName = "Enable structured logging", ToolTip = "Flag indicating whether to enable structured logging that forwards UE_LOG calls to Sentry logger."))
@@ -444,7 +467,7 @@ class SENTRY_API USentrySettings : public UObject
 	ESentryDatabaseLocation DatabaseLocation;
 
 	UPROPERTY(Config, EditAnywhere, Category = "General|Native",
-		Meta = (DisplayName = "Use native crash backend (Experimental)", ToolTip = "Use the experimental native backend for crash reporting on Windows and Linux instead of the default Crashpad backend. Requires rebuild after changing.",
+		Meta = (DisplayName = "Use native crash backend (Experimental)", ToolTip = "Use the experimental native backend for crash reporting on Windows, Linux, and macOS instead of the default backend (Crashpad on Windows/Linux, sentry-cocoa on macOS). Requires rebuild after changing.",
 			ConfigRestartRequired = true))
 	bool UseNativeBackend;
 
@@ -467,13 +490,13 @@ class SENTRY_API USentrySettings : public UObject
 		Meta = (DisplayName = "Enable logging during crash handling", ToolTip = "Flag indicating whether the SDK should log additional crash information (such as stack traces and error messages). This is intended for debug builds only and is not safe for production use."))
 	bool EnableOnCrashLogging;
 
-	UPROPERTY(Config, EditAnywhere, Category = "General|Native",
-		Meta = (DisplayName = "Enable external crash reporter",
-			ToolTip = "When enabled, a crash reporter dialog is shown to the user after a crash, allowing them to provide feedback before submitting the crash report. Supported on Windows and Linux only."))
+	UPROPERTY(Config, EditAnywhere, Category = "Sentry Crash Reporter",
+		Meta = (DisplayName = "Enable Sentry Crash Reporter",
+			ToolTip = "When enabled, the Sentry Crash Reporter dialog is shown to the user after a crash, allowing them to review crash details and provide feedback before the report is submitted."))
 	bool EnableExternalCrashReporter;
 
-	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "General|Native",
-		Meta = (DisplayName = "External crash reporter appearance", ToolTip = "Customize the appearance of the external crash reporter dialog.",
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Sentry Crash Reporter",
+		Meta = (DisplayName = "Sentry Crash Reporter appearance", ToolTip = "Customize the appearance of the Sentry Crash Reporter dialog.",
 			EditCondition = "EnableExternalCrashReporter"))
 	FSentryCrashReporterAppearance CrashReporterAppearance;
 
@@ -589,12 +612,12 @@ class SENTRY_API USentrySettings : public UObject
 			EditCondition = "UploadSymbolsAutomatically"))
 	bool UseLegacyGradlePlugin;
 
-	UPROPERTY(Config, EditAnywhere, Category = "Crash Reporter",
-		Meta = (DisplayName = "Crash Reporter Endpoint", ToolTip = "Endpoint that Unreal Engine Crah Reporter should use in order to upload crash data to Sentry."))
+	UPROPERTY(Config, EditAnywhere, Category = "Unreal Crash Reporter",
+		Meta = (DisplayName = "Crash Reporter Endpoint", ToolTip = "Endpoint that Unreal Crash Reporter should use in order to upload crash data to Sentry."))
 	FString CrashReporterUrl;
 
-	UPROPERTY(Config, EditAnywhere, Category = "Crash Reporter",
-		Meta = (DisplayName = "Allow Crash Reporter context propagation", ToolTip = "Flag indicating whether to automatically propagate additional data (e.g., tags, context) set via Sentry SDK interface to Crash Reporter."))
+	UPROPERTY(Config, EditAnywhere, Category = "Unreal Crash Reporter",
+		Meta = (DisplayName = "Allow Unreal Crash Reporter context propagation", ToolTip = "Flag indicating whether to automatically propagate additional data (e.g., tags, context) set via Sentry SDK interface to Unreal Crash Reporter."))
 	bool EnableCrashReporterContextPropagation;
 
 	UPROPERTY(Config, EditAnywhere, Category = "General|Consent",

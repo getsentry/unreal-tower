@@ -1,5 +1,49 @@
 # Changelog
 
+## 1.11.0
+
+> [!IMPORTANT]
+> Structured logs and metrics are enabled by default in this release. Applications that do not want to capture them must explicitly opt out by setting `EnableStructuredLogging` / `EnableMetrics` to `False` in the project's `.ini` configuration file.
+
+### Features
+
+- Add WinGDK platform support ([#1337](https://github.com/getsentry/sentry-unreal/pull/1337))
+- Add consent-aware offline caching ([#1341](https://github.com/getsentry/sentry-unreal/pull/1341))
+- Add out-of-process screenshot capturing on Windows ([#1325](https://github.com/getsentry/sentry-unreal/pull/1325))
+- Add experimental native backend support for Mac ([#1333](https://github.com/getsentry/sentry-unreal/pull/1333))
+- Add a dedicated plugin settings section for Sentry Crash Reporter([#1350](https://github.com/getsentry/sentry-unreal/pull/1350))
+- Add Crash Reporter logo customization ([#1349](https://github.com/getsentry/sentry-unreal/pull/1349))
+- Add setting to enable large attachments upload on native platforms ([#1364](https://github.com/getsentry/sentry-unreal/pull/1364))
+- Enable metrics by default ([#1363](https://github.com/getsentry/sentry-unreal/pull/1363))
+- Enable logs by default ([#1371](https://github.com/getsentry/sentry-unreal/pull/1371))
+
+### Fixes
+
+- Suppress superfluous warnings when detecting for SteamOS ([#1326](https://github.com/getsentry/sentry-unreal/pull/1326))
+- Fix intermittent crash when capturing screenshots due to invalid viewport ([#1331](https://github.com/getsentry/sentry-unreal/pull/1331))
+- Fix SN-DBS distributed builds failing to pre-sync platform-specific headers ([#1361](https://github.com/getsentry/sentry-unreal/pull/1361))
+
+### Dependencies
+
+- Bump CLI from v3.3.4 to v3.4.1 ([#1323](https://github.com/getsentry/sentry-unreal/pull/1323), [#1351](https://github.com/getsentry/sentry-unreal/pull/1351), [#1362](https://github.com/getsentry/sentry-unreal/pull/1362))
+  - [changelog](https://github.com/getsentry/sentry-cli/blob/master/CHANGELOG.md#341)
+  - [diff](https://github.com/getsentry/sentry-cli/compare/3.3.4...3.4.1)
+- Bump Cocoa SDK from v9.8.0 to v9.12.0 ([#1332](https://github.com/getsentry/sentry-unreal/pull/1332), [#1335](https://github.com/getsentry/sentry-unreal/pull/1335), [#1353](https://github.com/getsentry/sentry-unreal/pull/1353), [#1366](https://github.com/getsentry/sentry-unreal/pull/1366))
+  - [changelog](https://github.com/getsentry/sentry-cocoa/blob/main/CHANGELOG.md#9120)
+  - [diff](https://github.com/getsentry/sentry-cocoa/compare/9.8.0...9.12.0)
+- Bump Native SDK from v0.13.5-2-g814b822 to v0.14.0 ([#1334](https://github.com/getsentry/sentry-unreal/pull/1334), [#1339](https://github.com/getsentry/sentry-unreal/pull/1339), [#1345](https://github.com/getsentry/sentry-unreal/pull/1345), [#1358](https://github.com/getsentry/sentry-unreal/pull/1358), [#1367](https://github.com/getsentry/sentry-unreal/pull/1367), [#1370](https://github.com/getsentry/sentry-unreal/pull/1370))
+  - [changelog](https://github.com/getsentry/sentry-native/blob/master/CHANGELOG.md#0140)
+  - [diff](https://github.com/getsentry/sentry-native/compare/0.13.5-2-g814b822...0.14.0)
+- Bump Java SDK from v8.37.1 to v8.40.0 ([#1336](https://github.com/getsentry/sentry-unreal/pull/1336), [#1346](https://github.com/getsentry/sentry-unreal/pull/1346), [#1347](https://github.com/getsentry/sentry-unreal/pull/1347), [#1354](https://github.com/getsentry/sentry-unreal/pull/1354))
+  - [changelog](https://github.com/getsentry/sentry-java/blob/main/CHANGELOG.md#8400)
+  - [diff](https://github.com/getsentry/sentry-java/compare/8.37.1...8.40.0)
+- Bump Android Gradle Plugin from v6.3.0 to v6.6.0 ([#1338](https://github.com/getsentry/sentry-unreal/pull/1338), [#1355](https://github.com/getsentry/sentry-unreal/pull/1355), [#1369](https://github.com/getsentry/sentry-unreal/pull/1369))
+  - [changelog](https://github.com/getsentry/sentry-android-gradle-plugin/blob/main/CHANGELOG.md#660)
+  - [diff](https://github.com/getsentry/sentry-android-gradle-plugin/compare/6.3.0...6.6.0)
+- Bump Crash Reporter from v0.1.0 to v0.2.0 ([#1344](https://github.com/getsentry/sentry-unreal/pull/1344), [#1359](https://github.com/getsentry/sentry-unreal/pull/1359))
+  - [changelog](https://github.com/getsentry/sentry-desktop-crash-reporter/blob/main/CHANGELOG.md#020)
+  - [diff](https://github.com/getsentry/sentry-desktop-crash-reporter/compare/0.1.0...0.2.0)
+
 ## 1.10.0
 
 ### Features

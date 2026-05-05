@@ -2,6 +2,8 @@
 
 #include "AppleSentrySubsystem.h"
 
+#if !USE_SENTRY_NATIVE
+
 #include "AppleSentryAttachment.h"
 #include "AppleSentryBreadcrumb.h"
 #include "AppleSentryEvent.h"
@@ -71,7 +73,7 @@ void FAppleSentrySubsystem::InitWithSettings(const USentrySettings* settings, co
 			options.sendDefaultPii = settings->SendDefaultPii;
 			options.maxAttachmentSize = settings->MaxAttachmentSize;
 			options.enableLogs = settings->EnableStructuredLogging;
-			options.experimental.enableMetrics = settings->EnableMetrics;
+			options.enableMetrics = settings->EnableMetrics;
 #if SENTRY_UIKIT_AVAILABLE
 			options.attachScreenshot = settings->AttachScreenshot;
 #endif
@@ -699,3 +701,5 @@ FString FAppleSentrySubsystem::GetLatestScreenshot() const
 
 	return Screenshots[0];
 }
+
+#endif // !USE_SENTRY_NATIVE
