@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.12.0
+
+### Features
+
+- Add experimental session replay capturing on Xbox development kits ([#1378](https://github.com/getsentry/sentry-unreal/pull/1378))
+- Add SDK shutdown timeout as plugin setting for native desktop and console platforms ([#1379](https://github.com/getsentry/sentry-unreal/pull/1379))
+- Add NVIDIA Aftermath shader debug info (.nvdbg) attachments support for GPU crash events ([#1383](https://github.com/getsentry/sentry-unreal/pull/1383))
+
+### Fixes
+
+- Fix secondary crashes during memory-related error handling ([#1377](https://github.com/getsentry/sentry-unreal/pull/1377))
+- Fix Crash Reporter documentation links in plugin settings menu ([#1373](https://github.com/getsentry/sentry-unreal/pull/1373))
+- Fix `sentry.dylib` copying during post-build required for FAB publishing ([#1382](https://github.com/getsentry/sentry-unreal/pull/1382))
+
+### Dependencies
+
+- Bump Cocoa SDK from v9.12.0 to v9.13.0 ([#1375](https://github.com/getsentry/sentry-unreal/pull/1375), [#1381](https://github.com/getsentry/sentry-unreal/pull/1381))
+  - [changelog](https://github.com/getsentry/sentry-cocoa/blob/main/CHANGELOG.md#9130)
+  - [diff](https://github.com/getsentry/sentry-cocoa/compare/9.12.0...9.13.0)
+- Bump Java SDK from v8.40.0 to v8.41.0 ([#1376](https://github.com/getsentry/sentry-unreal/pull/1376))
+  - [changelog](https://github.com/getsentry/sentry-java/blob/main/CHANGELOG.md#8410)
+  - [diff](https://github.com/getsentry/sentry-java/compare/8.40.0...8.41.0)
+- Bump CLI from v3.4.1 to v3.4.2 ([#1380](https://github.com/getsentry/sentry-unreal/pull/1380))
+  - [changelog](https://github.com/getsentry/sentry-cli/blob/master/CHANGELOG.md#342)
+  - [diff](https://github.com/getsentry/sentry-cli/compare/3.4.1...3.4.2)
+- Bump Native SDK from v0.14.0 to v0.14.1 ([#1384](https://github.com/getsentry/sentry-unreal/pull/1384))
+  - [changelog](https://github.com/getsentry/sentry-native/blob/master/CHANGELOG.md#0141)
+  - [diff](https://github.com/getsentry/sentry-native/compare/0.14.0...0.14.1)
+
 ## 1.11.0
 
 > [!IMPORTANT]

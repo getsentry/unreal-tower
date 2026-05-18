@@ -1153,11 +1153,7 @@ SWIFT_CLASS_NAMED("SentryBinaryImageCache")
 - (void)start:(BOOL)isDebug;
 - (void)stop;
 - (void)binaryImageAdded:(char const * _Nullable)imageName vmAddress:(uint64_t)vmAddress address:(uint64_t)address size:(uint64_t)size uuid:(uint8_t const * _Nullable)uuid;
-+ (NSString * _Nullable)convertUUID:(uint8_t const * _Nullable)value SWIFT_WARN_UNUSED_RESULT;
-- (void)binaryImageRemoved:(uint64_t)imageAddress;
 - (SentryBinaryImageInfo * _Nullable)imageByAddress:(uint64_t)address SWIFT_WARN_UNUSED_RESULT;
-- (NSSet<NSString *> * _Nonnull)imagePathsForInAppInclude:(NSString * _Nonnull)inAppInclude SWIFT_WARN_UNUSED_RESULT;
-- (NSArray<SentryBinaryImageInfo *> * _Nonnull)getAllBinaryImages SWIFT_WARN_UNUSED_RESULT;
 - (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
 @end
 
@@ -1401,6 +1397,23 @@ SWIFT_CLASS("_TtC6Sentry28SentryCrashReportFilterSwift")
 + (nonnull instancetype)new SWIFT_UNAVAILABLE_MSG("-init is unavailable");
 @end
 
+SWIFT_PROTOCOL("_TtP6Sentry19SentryCrashReporter_")
+@protocol SentryCrashReporter <NSObject>
+@property (nonatomic, readonly) BOOL crashedLastLaunch;
+@property (nonatomic, readonly) NSTimeInterval durationFromCrashStateInitToLastCrash;
+@property (nonatomic, readonly) NSTimeInterval activeDurationSinceLastCrash;
+@property (nonatomic, readonly) BOOL isBeingTraced;
+@property (nonatomic, readonly) BOOL isSimulatorBuild;
+@property (nonatomic, readonly) BOOL isApplicationInForeground;
+@property (nonatomic, readonly) uint64_t freeMemorySize;
+@property (nonatomic, readonly) uint64_t appMemorySize;
+@property (nonatomic, readonly, copy) NSDictionary<NSString *, id> * _Nonnull systemInfo;
+@property (nonatomic, readonly, strong) id <SentryProcessInfoSource> _Nonnull processInfoWrapper;
+- (void)startBinaryImageCache;
+- (void)stopBinaryImageCache;
+- (void)enrichScope:(SentryScope * _Nonnull)scope;
+@end
+
 SWIFT_CLASS("_TtC6Sentry16SentryCrashSwift")
 @interface SentryCrashSwift : NSObject
 @property (nonatomic, readonly) BOOL crashedLastLaunch;
@@ -1420,28 +1433,6 @@ SWIFT_CLASS("_TtC6Sentry16SentryCrashSwift")
 - (BOOL)hasOnCrash SWIFT_WARN_UNUSED_RESULT;
 - (nonnull instancetype)init SWIFT_UNAVAILABLE;
 + (nonnull instancetype)new SWIFT_UNAVAILABLE_MSG("-init is unavailable");
-@end
-
-SWIFT_CLASS("_TtC6Sentry18SentryCrashWrapper")
-@interface SentryCrashWrapper : NSObject
-@property (nonatomic, readonly, copy) NSDictionary<NSString *, id> * _Nonnull systemInfo;
-- (nonnull instancetype)initWithProcessInfoWrapper:(id <SentryProcessInfoSource> _Nonnull)processInfoWrapper bridge:(SentryCrashBridge * _Nonnull)bridge OBJC_DESIGNATED_INITIALIZER;
-- (nonnull instancetype)init SWIFT_UNAVAILABLE;
-+ (nonnull instancetype)new SWIFT_UNAVAILABLE_MSG("-init is unavailable");
-@end
-
-@interface SentryCrashWrapper (SWIFT_EXTENSION(Sentry))
-- (void)startBinaryImageCache;
-- (void)stopBinaryImageCache;
-@property (nonatomic, readonly) BOOL crashedLastLaunch;
-@property (nonatomic, readonly) NSTimeInterval durationFromCrashStateInitToLastCrash;
-@property (nonatomic, readonly) NSTimeInterval activeDurationSinceLastCrash;
-@property (nonatomic, readonly) BOOL isBeingTraced;
-@property (nonatomic, readonly) BOOL isSimulatorBuild;
-@property (nonatomic, readonly) BOOL isApplicationInForeground;
-@property (nonatomic, readonly) uint64_t freeMemorySize;
-@property (nonatomic, readonly) uint64_t appMemorySize;
-- (void)enrichScope:(SentryScope * _Nonnull)scope;
 @end
 
 /// We need a protocol to expose SentryCurrentDateProvider to tests.
@@ -1484,6 +1475,29 @@ SWIFT_CLASS("_TtC6Sentry24SentryDebugImageProvider")
 - (NSArray<SentryDebugMeta *> * _Nonnull)getDebugImagesForImageAddressesFromCache:(NSSet<NSString *> * _Nonnull)imageAddresses SWIFT_WARN_UNUSED_RESULT;
 - (NSArray<SentryDebugMeta *> * _Nonnull)getDebugImagesFromCache SWIFT_WARN_UNUSED_RESULT;
 - (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
+@end
+
+SWIFT_CLASS("_TtC6Sentry26SentryDefaultCrashReporter")
+@interface SentryDefaultCrashReporter : NSObject <SentryCrashReporter>
+@property (nonatomic, readonly, strong) id <SentryProcessInfoSource> _Nonnull processInfoWrapper;
+@property (nonatomic, readonly, copy) NSDictionary<NSString *, id> * _Nonnull systemInfo;
+- (nonnull instancetype)initWithProcessInfoWrapper:(id <SentryProcessInfoSource> _Nonnull)processInfoWrapper bridge:(SentryCrashBridge * _Nonnull)bridge OBJC_DESIGNATED_INITIALIZER;
+- (nonnull instancetype)init SWIFT_UNAVAILABLE;
++ (nonnull instancetype)new SWIFT_UNAVAILABLE_MSG("-init is unavailable");
+@end
+
+@interface SentryDefaultCrashReporter (SWIFT_EXTENSION(Sentry))
+- (void)startBinaryImageCache;
+- (void)stopBinaryImageCache;
+@property (nonatomic, readonly) BOOL crashedLastLaunch;
+@property (nonatomic, readonly) NSTimeInterval durationFromCrashStateInitToLastCrash;
+@property (nonatomic, readonly) NSTimeInterval activeDurationSinceLastCrash;
+@property (nonatomic, readonly) BOOL isBeingTraced;
+@property (nonatomic, readonly) BOOL isSimulatorBuild;
+@property (nonatomic, readonly) BOOL isApplicationInForeground;
+@property (nonatomic, readonly) uint64_t freeMemorySize;
+@property (nonatomic, readonly) uint64_t appMemorySize;
+- (void)enrichScope:(SentryScope * _Nonnull)scope;
 @end
 
 SWIFT_CLASS("_TtC6Sentry32SentryDefaultCurrentDateProvider")
@@ -1583,7 +1597,7 @@ SWIFT_CLASS("_TtC6Sentry25SentryDependencyContainer")
 @property (nonatomic, strong) id <SentryCurrentDateProvider> _Nonnull dateProvider;
 @property (nonatomic, strong) id <SentryNSNotificationCenterWrapper> _Nonnull notificationCenterWrapper;
 @property (nonatomic, strong) id <SentryProcessInfoSource> _Nonnull processInfoWrapper;
-@property (nonatomic, strong) SentryCrashWrapper * _Nonnull crashWrapper;
+@property (nonatomic, strong) id <SentryCrashReporter> _Nonnull crashWrapper;
 @property (nonatomic, strong) SentryDispatchFactory * _Nonnull dispatchFactory;
 @property (nonatomic, strong) SentryNSTimerFactory * _Nonnull timerFactory;
 @property (nonatomic, strong) SentryFileIOTracker * _Nonnull fileIOTracker;
@@ -4661,7 +4675,7 @@ SWIFT_CLASS_PROPERTY(@property (nonatomic, class, readonly, copy) NSString * _No
 
 SWIFT_CLASS("_TtC6Sentry30SentryWatchdogTerminationLogic")
 @interface SentryWatchdogTerminationLogic : NSObject
-- (nonnull instancetype)initWithOptions:(SentryOptions * _Nonnull)options crashAdapter:(SentryCrashWrapper * _Nonnull)crashAdapter appStateManager:(SentryAppStateManager * _Nonnull)appStateManager OBJC_DESIGNATED_INITIALIZER;
+- (nonnull instancetype)initWithOptions:(SentryOptions * _Nonnull)options crashAdapter:(id <SentryCrashReporter> _Nonnull)crashAdapter appStateManager:(SentryAppStateManager * _Nonnull)appStateManager OBJC_DESIGNATED_INITIALIZER;
 - (BOOL)isWatchdogTermination SWIFT_WARN_UNUSED_RESULT;
 - (nonnull instancetype)init SWIFT_UNAVAILABLE;
 + (nonnull instancetype)new SWIFT_UNAVAILABLE_MSG("-init is unavailable");
@@ -4724,6 +4738,9 @@ SWIFT_CLASS("_TtC6Sentry12UrlSanitized")
 /// Global function to finish and save transaction when a crash occurs.
 /// This function is called from C crash reporting code.
 SWIFT_EXTERN void sentry_finishAndSaveTransaction(void) SWIFT_NOEXCEPT;
+
+/// Recursively sanitizes an NSDictionary, converting non-serializable values to strings.
+SWIFT_EXTERN NSDictionary * _Nullable sentry_sanitize_dictionary(NSDictionary * _Nullable dictionary) SWIFT_NOEXCEPT SWIFT_WARN_UNUSED_RESULT;
 
 #endif
 #if __has_attribute(external_source_symbol)
@@ -5888,11 +5905,7 @@ SWIFT_CLASS_NAMED("SentryBinaryImageCache")
 - (void)start:(BOOL)isDebug;
 - (void)stop;
 - (void)binaryImageAdded:(char const * _Nullable)imageName vmAddress:(uint64_t)vmAddress address:(uint64_t)address size:(uint64_t)size uuid:(uint8_t const * _Nullable)uuid;
-+ (NSString * _Nullable)convertUUID:(uint8_t const * _Nullable)value SWIFT_WARN_UNUSED_RESULT;
-- (void)binaryImageRemoved:(uint64_t)imageAddress;
 - (SentryBinaryImageInfo * _Nullable)imageByAddress:(uint64_t)address SWIFT_WARN_UNUSED_RESULT;
-- (NSSet<NSString *> * _Nonnull)imagePathsForInAppInclude:(NSString * _Nonnull)inAppInclude SWIFT_WARN_UNUSED_RESULT;
-- (NSArray<SentryBinaryImageInfo *> * _Nonnull)getAllBinaryImages SWIFT_WARN_UNUSED_RESULT;
 - (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
 @end
 
@@ -6136,6 +6149,23 @@ SWIFT_CLASS("_TtC6Sentry28SentryCrashReportFilterSwift")
 + (nonnull instancetype)new SWIFT_UNAVAILABLE_MSG("-init is unavailable");
 @end
 
+SWIFT_PROTOCOL("_TtP6Sentry19SentryCrashReporter_")
+@protocol SentryCrashReporter <NSObject>
+@property (nonatomic, readonly) BOOL crashedLastLaunch;
+@property (nonatomic, readonly) NSTimeInterval durationFromCrashStateInitToLastCrash;
+@property (nonatomic, readonly) NSTimeInterval activeDurationSinceLastCrash;
+@property (nonatomic, readonly) BOOL isBeingTraced;
+@property (nonatomic, readonly) BOOL isSimulatorBuild;
+@property (nonatomic, readonly) BOOL isApplicationInForeground;
+@property (nonatomic, readonly) uint64_t freeMemorySize;
+@property (nonatomic, readonly) uint64_t appMemorySize;
+@property (nonatomic, readonly, copy) NSDictionary<NSString *, id> * _Nonnull systemInfo;
+@property (nonatomic, readonly, strong) id <SentryProcessInfoSource> _Nonnull processInfoWrapper;
+- (void)startBinaryImageCache;
+- (void)stopBinaryImageCache;
+- (void)enrichScope:(SentryScope * _Nonnull)scope;
+@end
+
 SWIFT_CLASS("_TtC6Sentry16SentryCrashSwift")
 @interface SentryCrashSwift : NSObject
 @property (nonatomic, readonly) BOOL crashedLastLaunch;
@@ -6155,28 +6185,6 @@ SWIFT_CLASS("_TtC6Sentry16SentryCrashSwift")
 - (BOOL)hasOnCrash SWIFT_WARN_UNUSED_RESULT;
 - (nonnull instancetype)init SWIFT_UNAVAILABLE;
 + (nonnull instancetype)new SWIFT_UNAVAILABLE_MSG("-init is unavailable");
-@end
-
-SWIFT_CLASS("_TtC6Sentry18SentryCrashWrapper")
-@interface SentryCrashWrapper : NSObject
-@property (nonatomic, readonly, copy) NSDictionary<NSString *, id> * _Nonnull systemInfo;
-- (nonnull instancetype)initWithProcessInfoWrapper:(id <SentryProcessInfoSource> _Nonnull)processInfoWrapper bridge:(SentryCrashBridge * _Nonnull)bridge OBJC_DESIGNATED_INITIALIZER;
-- (nonnull instancetype)init SWIFT_UNAVAILABLE;
-+ (nonnull instancetype)new SWIFT_UNAVAILABLE_MSG("-init is unavailable");
-@end
-
-@interface SentryCrashWrapper (SWIFT_EXTENSION(Sentry))
-- (void)startBinaryImageCache;
-- (void)stopBinaryImageCache;
-@property (nonatomic, readonly) BOOL crashedLastLaunch;
-@property (nonatomic, readonly) NSTimeInterval durationFromCrashStateInitToLastCrash;
-@property (nonatomic, readonly) NSTimeInterval activeDurationSinceLastCrash;
-@property (nonatomic, readonly) BOOL isBeingTraced;
-@property (nonatomic, readonly) BOOL isSimulatorBuild;
-@property (nonatomic, readonly) BOOL isApplicationInForeground;
-@property (nonatomic, readonly) uint64_t freeMemorySize;
-@property (nonatomic, readonly) uint64_t appMemorySize;
-- (void)enrichScope:(SentryScope * _Nonnull)scope;
 @end
 
 /// We need a protocol to expose SentryCurrentDateProvider to tests.
@@ -6219,6 +6227,29 @@ SWIFT_CLASS("_TtC6Sentry24SentryDebugImageProvider")
 - (NSArray<SentryDebugMeta *> * _Nonnull)getDebugImagesForImageAddressesFromCache:(NSSet<NSString *> * _Nonnull)imageAddresses SWIFT_WARN_UNUSED_RESULT;
 - (NSArray<SentryDebugMeta *> * _Nonnull)getDebugImagesFromCache SWIFT_WARN_UNUSED_RESULT;
 - (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
+@end
+
+SWIFT_CLASS("_TtC6Sentry26SentryDefaultCrashReporter")
+@interface SentryDefaultCrashReporter : NSObject <SentryCrashReporter>
+@property (nonatomic, readonly, strong) id <SentryProcessInfoSource> _Nonnull processInfoWrapper;
+@property (nonatomic, readonly, copy) NSDictionary<NSString *, id> * _Nonnull systemInfo;
+- (nonnull instancetype)initWithProcessInfoWrapper:(id <SentryProcessInfoSource> _Nonnull)processInfoWrapper bridge:(SentryCrashBridge * _Nonnull)bridge OBJC_DESIGNATED_INITIALIZER;
+- (nonnull instancetype)init SWIFT_UNAVAILABLE;
++ (nonnull instancetype)new SWIFT_UNAVAILABLE_MSG("-init is unavailable");
+@end
+
+@interface SentryDefaultCrashReporter (SWIFT_EXTENSION(Sentry))
+- (void)startBinaryImageCache;
+- (void)stopBinaryImageCache;
+@property (nonatomic, readonly) BOOL crashedLastLaunch;
+@property (nonatomic, readonly) NSTimeInterval durationFromCrashStateInitToLastCrash;
+@property (nonatomic, readonly) NSTimeInterval activeDurationSinceLastCrash;
+@property (nonatomic, readonly) BOOL isBeingTraced;
+@property (nonatomic, readonly) BOOL isSimulatorBuild;
+@property (nonatomic, readonly) BOOL isApplicationInForeground;
+@property (nonatomic, readonly) uint64_t freeMemorySize;
+@property (nonatomic, readonly) uint64_t appMemorySize;
+- (void)enrichScope:(SentryScope * _Nonnull)scope;
 @end
 
 SWIFT_CLASS("_TtC6Sentry32SentryDefaultCurrentDateProvider")
@@ -6318,7 +6349,7 @@ SWIFT_CLASS("_TtC6Sentry25SentryDependencyContainer")
 @property (nonatomic, strong) id <SentryCurrentDateProvider> _Nonnull dateProvider;
 @property (nonatomic, strong) id <SentryNSNotificationCenterWrapper> _Nonnull notificationCenterWrapper;
 @property (nonatomic, strong) id <SentryProcessInfoSource> _Nonnull processInfoWrapper;
-@property (nonatomic, strong) SentryCrashWrapper * _Nonnull crashWrapper;
+@property (nonatomic, strong) id <SentryCrashReporter> _Nonnull crashWrapper;
 @property (nonatomic, strong) SentryDispatchFactory * _Nonnull dispatchFactory;
 @property (nonatomic, strong) SentryNSTimerFactory * _Nonnull timerFactory;
 @property (nonatomic, strong) SentryFileIOTracker * _Nonnull fileIOTracker;
@@ -9396,7 +9427,7 @@ SWIFT_CLASS_PROPERTY(@property (nonatomic, class, readonly, copy) NSString * _No
 
 SWIFT_CLASS("_TtC6Sentry30SentryWatchdogTerminationLogic")
 @interface SentryWatchdogTerminationLogic : NSObject
-- (nonnull instancetype)initWithOptions:(SentryOptions * _Nonnull)options crashAdapter:(SentryCrashWrapper * _Nonnull)crashAdapter appStateManager:(SentryAppStateManager * _Nonnull)appStateManager OBJC_DESIGNATED_INITIALIZER;
+- (nonnull instancetype)initWithOptions:(SentryOptions * _Nonnull)options crashAdapter:(id <SentryCrashReporter> _Nonnull)crashAdapter appStateManager:(SentryAppStateManager * _Nonnull)appStateManager OBJC_DESIGNATED_INITIALIZER;
 - (BOOL)isWatchdogTermination SWIFT_WARN_UNUSED_RESULT;
 - (nonnull instancetype)init SWIFT_UNAVAILABLE;
 + (nonnull instancetype)new SWIFT_UNAVAILABLE_MSG("-init is unavailable");
@@ -9459,6 +9490,9 @@ SWIFT_CLASS("_TtC6Sentry12UrlSanitized")
 /// Global function to finish and save transaction when a crash occurs.
 /// This function is called from C crash reporting code.
 SWIFT_EXTERN void sentry_finishAndSaveTransaction(void) SWIFT_NOEXCEPT;
+
+/// Recursively sanitizes an NSDictionary, converting non-serializable values to strings.
+SWIFT_EXTERN NSDictionary * _Nullable sentry_sanitize_dictionary(NSDictionary * _Nullable dictionary) SWIFT_NOEXCEPT SWIFT_WARN_UNUSED_RESULT;
 
 #endif
 #if __has_attribute(external_source_symbol)
