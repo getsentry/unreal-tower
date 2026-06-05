@@ -658,8 +658,10 @@ SWIFT_CLASS_NAMED("Options")
 /// during these steps. This approach will shorten the app start duration, but it represents the
 /// duration a user has to wait after clicking the app icon until the app is responsive.
 /// @note You can filter for different app start types in Discover with
-/// @c app_start_type:cold.prewarmed ,
-/// @c app_start_type:warm.prewarmed , @c app_start_type:cold , and @c app_start_type:warm .
+/// <code>app.vitals.start.type:cold.prewarmed</code>,
+/// <code>app.vitals.start.type:warm.prewarmed</code>,
+/// <code>app.vitals.start.type:cold</code>, and
+/// <code>app.vitals.start.type:warm</code>.
 /// @warning This feature is not available in @c DebugWithoutUIKit and @c ReleaseWithoutUIKit
 /// configurations even when targeting iOS or tvOS platforms.
 /// @note Default value is @c true.
@@ -1882,6 +1884,9 @@ SWIFT_CLASS("_TtC6Sentry25SentryExperimentalOptions")
 /// <code>options.sessionReplay.networkDetailAllowUrls</code> with URL patterns to specify which
 /// requests should be captured.
 @property (nonatomic) BOOL enableReplayNetworkDetailsCapturing;
+/// When enabled, the SDK sends a standalone app start transaction instead of attaching app
+/// start data to the first UIViewController transaction.
+@property (nonatomic) BOOL enableStandaloneAppStartTracing;
 - (void)validateOptions:(NSDictionary<NSString *, id> * _Nullable)options;
 - (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
 @end
@@ -1935,12 +1940,12 @@ typedef SWIFT_ENUM(NSInteger, SentryFeedbackSource, open) {
 @end
 
 @interface SentryFeedback (SWIFT_EXTENSION(Sentry))
-/// Returns all attachments for inclusion in the feedback envelope.
-- (NSArray<SentryAttachment *> * _Nonnull)attachmentsForEnvelope SWIFT_WARN_UNUSED_RESULT;
+- (NSDictionary<NSString *, id> * _Nonnull)serialize SWIFT_WARN_UNUSED_RESULT;
 @end
 
 @interface SentryFeedback (SWIFT_EXTENSION(Sentry))
-- (NSDictionary<NSString *, id> * _Nonnull)serialize SWIFT_WARN_UNUSED_RESULT;
+/// Returns all attachments for inclusion in the feedback envelope.
+- (NSArray<SentryAttachment *> * _Nonnull)attachmentsForEnvelope SWIFT_WARN_UNUSED_RESULT;
 @end
 
 /// API for interacting with the feature User Feedback
@@ -3626,6 +3631,42 @@ SWIFT_CLASS_PROPERTY(@property (nonatomic, class, readonly) BOOL detectedStartUp
 ///
 /// https://docs.sentry.io/platforms/cocoa/performance/instrumentation/automatic-instrumentation/#time-to-full-display
 + (void)reportFullyDisplayed;
+/// Extends the app launch measurement beyond the default end point.
+/// Call this method after <code>start(options:)</code> but before didFinishLaunching notification is posted
+/// so the SDK doesn’t finish the app start transaction automatically.
+/// For UIKit apps this should be called before UIApplication.application(_:didFinishLaunchingWithOptions:)
+/// finishes:
+/// \code
+/// func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+///     SentrySDK.start(configureOptions: { options in
+///         ...
+///         options.experimental.enableStandaloneAppStartTracing = true
+///     })
+///     SentrySDK.extendAppLaunch()
+///     return true
+/// }
+///
+/// \endcodeFor SwiftUI apps, you can call <code>extendAppLaunch()</code> in the constructor of your <code>App</code>
+/// \code
+/// @main
+/// struct SwiftUIApp: App {
+///     init() {
+///         SentrySDK.start(configureOptions: { options in
+///             ...
+///             options.experimental.enableStandaloneAppStartTracing = true
+///         })
+///         SentrySDK.extendAppLaunch()
+///     }
+/// }
+///
+/// \endcodeLater, call <code>finishExtendedAppLaunch()</code> to mark the app as fully launched.
+/// note:
+/// This only has an effect when Standalone App Start tracing is enabled.
++ (void)extendAppLaunch;
+/// Finishes a previously extended app launch and sends the app start transaction.
+/// If <code>extendAppLaunch()</code> was not called, or the extended launch was already
+/// finished, this method does nothing.
++ (void)finishExtendedAppLaunch;
 /// Pauses sending detected app hangs to Sentry.
 /// This method doesn’t close the detection of app hangs. Instead, the app hang detection
 /// will ignore detected app hangs until you call <code>resumeAppHangTracking</code>.
@@ -3914,7 +3955,9 @@ SWIFT_CLASS("_TtC6Sentry13SentrySession")
 
 SWIFT_PROTOCOL("_TtP6Sentry21SentrySessionListener_")
 @protocol SentrySessionListener
+/// Called on the main thread when a session ends.
 - (void)sentrySessionEndedWithSession:(SentrySession * _Nonnull)session;
+/// Called on the main thread when a session starts.
 - (void)sentrySessionStartedWithSession:(SentrySession * _Nonnull)session;
 @end
 
@@ -4698,6 +4741,14 @@ SWIFT_CLASS_PROPERTY(@property (nonatomic, class, readonly, copy) NSString * _No
 - (void)stop;
 - (nonnull instancetype)init SWIFT_UNAVAILABLE;
 + (nonnull instancetype)new SWIFT_UNAVAILABLE_MSG("-init is unavailable");
+@end
+
+/// Helper to identify standalone app start transactions from ObjC code.
+SWIFT_CLASS("_TtC6Sentry35StandaloneAppStartTransactionHelper")
+@interface StandaloneAppStartTransactionHelper : NSObject
+/// Returns <code>true</code> when the operation and origin match a standalone app start transaction.
++ (BOOL)isStandaloneAppStartTransactionWithOperation:(NSString * _Nonnull)operation origin:(NSString * _Nonnull)origin SWIFT_WARN_UNUSED_RESULT;
+- (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
 @end
 
 SWIFT_CLASS("_TtC6Sentry15SwiftDescriptor")
@@ -5410,8 +5461,10 @@ SWIFT_CLASS_NAMED("Options")
 /// during these steps. This approach will shorten the app start duration, but it represents the
 /// duration a user has to wait after clicking the app icon until the app is responsive.
 /// @note You can filter for different app start types in Discover with
-/// @c app_start_type:cold.prewarmed ,
-/// @c app_start_type:warm.prewarmed , @c app_start_type:cold , and @c app_start_type:warm .
+/// <code>app.vitals.start.type:cold.prewarmed</code>,
+/// <code>app.vitals.start.type:warm.prewarmed</code>,
+/// <code>app.vitals.start.type:cold</code>, and
+/// <code>app.vitals.start.type:warm</code>.
 /// @warning This feature is not available in @c DebugWithoutUIKit and @c ReleaseWithoutUIKit
 /// configurations even when targeting iOS or tvOS platforms.
 /// @note Default value is @c true.
@@ -6634,6 +6687,9 @@ SWIFT_CLASS("_TtC6Sentry25SentryExperimentalOptions")
 /// <code>options.sessionReplay.networkDetailAllowUrls</code> with URL patterns to specify which
 /// requests should be captured.
 @property (nonatomic) BOOL enableReplayNetworkDetailsCapturing;
+/// When enabled, the SDK sends a standalone app start transaction instead of attaching app
+/// start data to the first UIViewController transaction.
+@property (nonatomic) BOOL enableStandaloneAppStartTracing;
 - (void)validateOptions:(NSDictionary<NSString *, id> * _Nullable)options;
 - (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
 @end
@@ -6687,12 +6743,12 @@ typedef SWIFT_ENUM(NSInteger, SentryFeedbackSource, open) {
 @end
 
 @interface SentryFeedback (SWIFT_EXTENSION(Sentry))
-/// Returns all attachments for inclusion in the feedback envelope.
-- (NSArray<SentryAttachment *> * _Nonnull)attachmentsForEnvelope SWIFT_WARN_UNUSED_RESULT;
+- (NSDictionary<NSString *, id> * _Nonnull)serialize SWIFT_WARN_UNUSED_RESULT;
 @end
 
 @interface SentryFeedback (SWIFT_EXTENSION(Sentry))
-- (NSDictionary<NSString *, id> * _Nonnull)serialize SWIFT_WARN_UNUSED_RESULT;
+/// Returns all attachments for inclusion in the feedback envelope.
+- (NSArray<SentryAttachment *> * _Nonnull)attachmentsForEnvelope SWIFT_WARN_UNUSED_RESULT;
 @end
 
 /// API for interacting with the feature User Feedback
@@ -8378,6 +8434,42 @@ SWIFT_CLASS_PROPERTY(@property (nonatomic, class, readonly) BOOL detectedStartUp
 ///
 /// https://docs.sentry.io/platforms/cocoa/performance/instrumentation/automatic-instrumentation/#time-to-full-display
 + (void)reportFullyDisplayed;
+/// Extends the app launch measurement beyond the default end point.
+/// Call this method after <code>start(options:)</code> but before didFinishLaunching notification is posted
+/// so the SDK doesn’t finish the app start transaction automatically.
+/// For UIKit apps this should be called before UIApplication.application(_:didFinishLaunchingWithOptions:)
+/// finishes:
+/// \code
+/// func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+///     SentrySDK.start(configureOptions: { options in
+///         ...
+///         options.experimental.enableStandaloneAppStartTracing = true
+///     })
+///     SentrySDK.extendAppLaunch()
+///     return true
+/// }
+///
+/// \endcodeFor SwiftUI apps, you can call <code>extendAppLaunch()</code> in the constructor of your <code>App</code>
+/// \code
+/// @main
+/// struct SwiftUIApp: App {
+///     init() {
+///         SentrySDK.start(configureOptions: { options in
+///             ...
+///             options.experimental.enableStandaloneAppStartTracing = true
+///         })
+///         SentrySDK.extendAppLaunch()
+///     }
+/// }
+///
+/// \endcodeLater, call <code>finishExtendedAppLaunch()</code> to mark the app as fully launched.
+/// note:
+/// This only has an effect when Standalone App Start tracing is enabled.
++ (void)extendAppLaunch;
+/// Finishes a previously extended app launch and sends the app start transaction.
+/// If <code>extendAppLaunch()</code> was not called, or the extended launch was already
+/// finished, this method does nothing.
++ (void)finishExtendedAppLaunch;
 /// Pauses sending detected app hangs to Sentry.
 /// This method doesn’t close the detection of app hangs. Instead, the app hang detection
 /// will ignore detected app hangs until you call <code>resumeAppHangTracking</code>.
@@ -8666,7 +8758,9 @@ SWIFT_CLASS("_TtC6Sentry13SentrySession")
 
 SWIFT_PROTOCOL("_TtP6Sentry21SentrySessionListener_")
 @protocol SentrySessionListener
+/// Called on the main thread when a session ends.
 - (void)sentrySessionEndedWithSession:(SentrySession * _Nonnull)session;
+/// Called on the main thread when a session starts.
 - (void)sentrySessionStartedWithSession:(SentrySession * _Nonnull)session;
 @end
 
@@ -9450,6 +9544,14 @@ SWIFT_CLASS_PROPERTY(@property (nonatomic, class, readonly, copy) NSString * _No
 - (void)stop;
 - (nonnull instancetype)init SWIFT_UNAVAILABLE;
 + (nonnull instancetype)new SWIFT_UNAVAILABLE_MSG("-init is unavailable");
+@end
+
+/// Helper to identify standalone app start transactions from ObjC code.
+SWIFT_CLASS("_TtC6Sentry35StandaloneAppStartTransactionHelper")
+@interface StandaloneAppStartTransactionHelper : NSObject
+/// Returns <code>true</code> when the operation and origin match a standalone app start transaction.
++ (BOOL)isStandaloneAppStartTransactionWithOperation:(NSString * _Nonnull)operation origin:(NSString * _Nonnull)origin SWIFT_WARN_UNUSED_RESULT;
+- (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
 @end
 
 SWIFT_CLASS("_TtC6Sentry15SwiftDescriptor")

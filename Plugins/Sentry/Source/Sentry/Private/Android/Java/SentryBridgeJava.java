@@ -27,6 +27,7 @@ import io.sentry.Sentry;
 import io.sentry.SentryEvent;
 import io.sentry.SentryLevel;
 import io.sentry.SentryOptions;
+import io.sentry.SentryReplayOptions;
 import io.sentry.android.core.SentryAndroid;
 import io.sentry.android.core.SentryAndroidOptions;
 import io.sentry.exception.ExceptionMechanismException;
@@ -70,6 +71,10 @@ public class SentryBridgeJava {
 					options.setSampleRate(settingJson.getDouble("sampleRate"));
 					options.setMaxBreadcrumbs(settingJson.getInt("maxBreadcrumbs"));
 					options.setSendDefaultPii(settingJson.getBoolean("sendDefaultPii"));
+					if(settingJson.getBoolean("attachSessionReplay")) {
+						options.getSessionReplay().setSessionSampleRate(1.0);
+						options.getSessionReplay().setCaptureSurfaceViews(true);
+					}
 					JSONArray Includes = settingJson.getJSONArray("inAppInclude");
 					for (int i = 0; i < Includes.length(); i++) {
 						options.addInAppInclude(Includes.getString(i));
@@ -79,6 +84,7 @@ public class SentryBridgeJava {
 						options.addInAppExclude(Excludes.getString(i));
 					}
 					options.setAnrEnabled(settingJson.getBoolean("enableAnrTracking"));
+					options.setAnrTimeoutIntervalMillis(settingJson.getLong("anrTimeoutMillis"));
                     options.setEnableNdk(settingJson.getBoolean("enableNdk"));
                     options.setTombstoneEnabled(settingJson.getBoolean("enableTombstone"));
 					options.getLogs().setEnabled(settingJson.getBoolean("enableStructuredLogging"));

@@ -67,10 +67,12 @@ void FAndroidSentrySubsystem::InitWithSettings(const USentrySettings* settings, 
 	SettingsJson->SetNumberField(TEXT("sampleRate"), settings->SampleRate);
 	SettingsJson->SetNumberField(TEXT("maxBreadcrumbs"), settings->MaxBreadcrumbs);
 	SettingsJson->SetBoolField(TEXT("attachScreenshot"), settings->AttachScreenshot);
+	SettingsJson->SetBoolField(TEXT("attachSessionReplay"), settings->AttachSessionReplay);
 	SettingsJson->SetArrayField(TEXT("inAppInclude"), FAndroidSentryConverters::StrinArrayToJsonArray(settings->InAppInclude));
 	SettingsJson->SetArrayField(TEXT("inAppExclude"), FAndroidSentryConverters::StrinArrayToJsonArray(settings->InAppExclude));
 	SettingsJson->SetBoolField(TEXT("sendDefaultPii"), settings->SendDefaultPii);
 	SettingsJson->SetBoolField(TEXT("enableAnrTracking"), settings->EnableAppNotRespondingTracking);
+	SettingsJson->SetNumberField(TEXT("anrTimeoutMillis"), settings->AppNotRespondingTimeout * 1000.0f);
 	SettingsJson->SetBoolField(TEXT("enableNdk"), settings->AndroidCrashBackend != ESentryAndroidCrashBackend::TombstoneOnly);
 	SettingsJson->SetBoolField(TEXT("enableTombstone"),
 		settings->AndroidCrashBackend == ESentryAndroidCrashBackend::TombstoneOnly || settings->AndroidCrashBackend == ESentryAndroidCrashBackend::TombstoneMergedWithNdk);

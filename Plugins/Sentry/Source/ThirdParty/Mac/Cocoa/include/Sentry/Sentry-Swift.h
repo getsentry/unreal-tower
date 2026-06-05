@@ -1721,6 +1721,9 @@ SWIFT_CLASS("_TtC6Sentry25SentryExperimentalOptions")
 /// <code>options.sessionReplay.networkDetailAllowUrls</code> with URL patterns to specify which
 /// requests should be captured.
 @property (nonatomic) BOOL enableReplayNetworkDetailsCapturing;
+/// When enabled, the SDK sends a standalone app start transaction instead of attaching app
+/// start data to the first UIViewController transaction.
+@property (nonatomic) BOOL enableStandaloneAppStartTracing;
 - (void)validateOptions:(NSDictionary<NSString *, id> * _Nullable)options;
 - (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
 @end
@@ -3580,7 +3583,9 @@ SWIFT_CLASS("_TtC6Sentry13SentrySession")
 
 SWIFT_PROTOCOL("_TtP6Sentry21SentrySessionListener_")
 @protocol SentrySessionListener
+/// Called on the main thread when a session ends.
 - (void)sentrySessionEndedWithSession:(SentrySession * _Nonnull)session;
+/// Called on the main thread when a session starts.
 - (void)sentrySessionStartedWithSession:(SentrySession * _Nonnull)session;
 @end
 
@@ -5662,6 +5667,9 @@ SWIFT_CLASS("_TtC6Sentry25SentryExperimentalOptions")
 /// <code>options.sessionReplay.networkDetailAllowUrls</code> with URL patterns to specify which
 /// requests should be captured.
 @property (nonatomic) BOOL enableReplayNetworkDetailsCapturing;
+/// When enabled, the SDK sends a standalone app start transaction instead of attaching app
+/// start data to the first UIViewController transaction.
+@property (nonatomic) BOOL enableStandaloneAppStartTracing;
 - (void)validateOptions:(NSDictionary<NSString *, id> * _Nullable)options;
 - (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
 @end
@@ -7521,7 +7529,9 @@ SWIFT_CLASS("_TtC6Sentry13SentrySession")
 
 SWIFT_PROTOCOL("_TtP6Sentry21SentrySessionListener_")
 @protocol SentrySessionListener
+/// Called on the main thread when a session ends.
 - (void)sentrySessionEndedWithSession:(SentrySession * _Nonnull)session;
+/// Called on the main thread when a session starts.
 - (void)sentrySessionStartedWithSession:(SentrySession * _Nonnull)session;
 @end
 
@@ -9603,6 +9613,9 @@ SWIFT_CLASS("_TtC6Sentry25SentryExperimentalOptions")
 /// <code>options.sessionReplay.networkDetailAllowUrls</code> with URL patterns to specify which
 /// requests should be captured.
 @property (nonatomic) BOOL enableReplayNetworkDetailsCapturing;
+/// When enabled, the SDK sends a standalone app start transaction instead of attaching app
+/// start data to the first UIViewController transaction.
+@property (nonatomic) BOOL enableStandaloneAppStartTracing;
 - (void)validateOptions:(NSDictionary<NSString *, id> * _Nullable)options;
 - (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
 @end
@@ -11462,7 +11475,9 @@ SWIFT_CLASS("_TtC6Sentry13SentrySession")
 
 SWIFT_PROTOCOL("_TtP6Sentry21SentrySessionListener_")
 @protocol SentrySessionListener
+/// Called on the main thread when a session ends.
 - (void)sentrySessionEndedWithSession:(SentrySession * _Nonnull)session;
+/// Called on the main thread when a session starts.
 - (void)sentrySessionStartedWithSession:(SentrySession * _Nonnull)session;
 @end
 
