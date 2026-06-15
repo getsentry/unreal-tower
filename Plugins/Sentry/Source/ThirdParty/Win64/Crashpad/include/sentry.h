@@ -101,7 +101,7 @@ extern "C" {
 #    endif
 #endif
 #ifndef SENTRY_SDK_VERSION
-#    define SENTRY_SDK_VERSION "0.14.2"
+#    define SENTRY_SDK_VERSION "0.15.0"
 #endif
 #define SENTRY_SDK_USER_AGENT SENTRY_SDK_NAME "/" SENTRY_SDK_VERSION
 
@@ -245,12 +245,14 @@ typedef union sentry_value_u sentry_value_t;
 /**
  * Increments the reference count on the value.
  */
-SENTRY_API void sentry_value_incref(sentry_value_t value);
+SENTRY_API sentry_value_t sentry_value_incref(sentry_value_t value);
 
 /**
  * Decrements the reference count on the value.
+ * Returns 0 if the value was freed or is a primitive (no tracking needed),
+ * or non-zero if it still has references.
  */
-SENTRY_API void sentry_value_decref(sentry_value_t value);
+SENTRY_API int sentry_value_decref(sentry_value_t value);
 
 /**
  * Returns the refcount of a value.
@@ -1074,6 +1076,25 @@ typedef enum {
 } sentry_crash_reporting_mode_t;
 
 /**
+ * Crash upload mode for the native backend.
+ * Controls whether the crashed application remains blocked while upload and
+ * shutdown work finishes after crash data has been captured.
+ */
+typedef enum {
+    /**
+     * Keep the crashed application blocked until the native crash daemon
+     * finishes upload and shutdown work.
+     */
+    SENTRY_CRASH_UPLOAD_MODE_SYNC = 0,
+
+    /**
+     * Allow the crashed application to terminate after crash data has been
+     * captured. The native crash daemon continues upload and shutdown work.
+     */
+    SENTRY_CRASH_UPLOAD_MODE_ASYNC = 1,
+} sentry_crash_upload_mode_t;
+
+/**
  * Controls if and when envelopes are kept in the persistent cache.
  */
 typedef enum {
@@ -1154,10 +1175,10 @@ SENTRY_API void sentry_options_set_send_default_pii(
  *
  * https://develop.sentry.dev/sdk/sessions/#filter-order
  *
- * On Windows the crashpad backend can capture fast-fail crashes which bypass
- * SEH. Since the `before_send` is called by a local exception-handler, it will
- * not be invoked when such a crash happened, even though a minidump will be
- * sent.
+ * On Windows, the crashpad and native backends can capture fast-fail crashes
+ * which bypass SEH. Since the `before_send` callback is called by a local
+ * exception-handler, it will not be invoked when such a crash happened, even
+ * though a crash report will be sent.
  */
 typedef sentry_value_t (*sentry_event_function_t)(
     sentry_value_t event, void *hint, void *user_data);
@@ -1215,10 +1236,10 @@ SENTRY_API void sentry_options_set_before_send(
  *
  *  - does not work with crashpad on macOS.
  *  - for breakpad on Linux the `uctx` parameter is always NULL.
- *  - on Windows the crashpad backend can capture fast-fail crashes which
- *    bypass SEH. Since `on_crash` is called by a local exception-handler, it
- *    will not be invoked when such a crash happened, even though a minidump
- *    will be sent.
+ *  - on Windows, the crashpad and native backends can capture fast-fail crashes
+ *    which bypass SEH. Since `on_crash` is called by a local
+ *    exception-handler, it will not be invoked when such a crash happened, even
+ *    though a crash report will be sent.
  */
 typedef sentry_value_t (*sentry_crash_function_t)(
     const sentry_ucontext_t *uctx, sentry_value_t event, void *user_data);
@@ -1618,8 +1639,8 @@ SENTRY_API void sentry_options_add_view_hierarchy_n(
  *
  * This feature is currently supported by all backends on Windows. The
  * `crashpad` and `native` backends capture screenshots from an out-of-process
- * handler. Only the `crashpad` backend can capture screenshots of fast-fail
- * crashes that bypass SEH (structured exception handling).
+ * handler. Only the `crashpad` and `native` backends can capture screenshots of
+ * fast-fail crashes that bypass SEH (structured exception handling).
  *
  * To decide per-event whether a screenshot should be captured, set a
  * `before_screenshot` callback via `sentry_options_set_before_screenshot`.
@@ -1836,10 +1857,10 @@ SENTRY_EXPERIMENTAL_API int sentry_set_thread_stack_guarantee(
 /**
  * Enables forwarding to the system crash reporter. Disabled by default.
  *
- * This setting only has an effect when using Crashpad on macOS. If enabled,
- * Crashpad forwards crashes to the macOS system crash reporter. Depending
- * on the crash, this may impact the crash time. Even if enabled, Crashpad
- * may choose not to forward certain crashes.
+ * This setting only has an effect when using the crashpad or native backend on
+ * macOS. If enabled, the crash handler forwards crashes to the macOS system
+ * crash reporter. Depending on the crash, this may impact the crash time. Even
+ * if enabled, the crash handler may choose not to forward certain crashes.
  */
 SENTRY_API void sentry_options_set_system_crash_reporter_enabled(
     sentry_options_t *opts, int enabled);
@@ -1883,6 +1904,27 @@ SENTRY_API sentry_crash_reporting_mode_t
 sentry_options_get_crash_reporting_mode(const sentry_options_t *opts);
 
 /**
+ * Sets the crash upload mode for the native backend.
+ *
+ * This setting controls what happens after crash data has been captured. In
+ * sync mode, the crashed application remains blocked while the native crash
+ * daemon finishes upload and shutdown work. In async mode, the crashed
+ * application can terminate after crash data has been captured while the daemon
+ * continues upload and shutdown work.
+ *
+ * This setting only has an effect when using the `native` backend.
+ * Default is `SENTRY_CRASH_UPLOAD_MODE_SYNC`.
+ */
+SENTRY_API void sentry_options_set_crash_upload_mode(
+    sentry_options_t *opts, sentry_crash_upload_mode_t mode);
+
+/**
+ * Gets the crash upload mode for the native backend.
+ */
+SENTRY_API sentry_crash_upload_mode_t sentry_options_get_crash_upload_mode(
+    const sentry_options_t *opts);
+
+/**
  * Enables a wait for the crash report upload to be finished before shutting
  * down. This is disabled by default.
  *
@@ -1920,6 +1962,26 @@ SENTRY_API void sentry_options_set_shutdown_timeout(
  * end on shutdown before attempting a forced termination.
  */
 SENTRY_API uint64_t sentry_options_get_shutdown_timeout(sentry_options_t *opts);
+
+/**
+ * Sets the timeout (in milliseconds) for HTTP transfer operations.
+ *
+ * On curl, this limits the total time an HTTP request is allowed to take. On
+ * WinHTTP, this is applied to send and receive operations, which WinHTTP
+ * applies to individual packets.
+ *
+ * This setting applies to the SDK-managed HTTP transports. It is not supported
+ * by Crashpad's crash report upload.
+ *
+ * The default value is 0, which disables the transfer timeout.
+ */
+SENTRY_API void sentry_options_set_transfer_timeout(
+    sentry_options_t *opts, uint64_t transfer_timeout);
+
+/**
+ * Gets the timeout (in milliseconds) for HTTP transfer operations.
+ */
+SENTRY_API uint64_t sentry_options_get_transfer_timeout(sentry_options_t *opts);
 
 /**
  * Sets a user-defined backend.
@@ -2239,7 +2301,8 @@ SENTRY_API void sentry_remove_context_n(const char *key, size_t key_len);
  * Sets the event fingerprint.
  *
  * This accepts a variable number of arguments and needs to be terminated by a
- * trailing `NULL`.
+ * trailing `NULL`. Each string argument in the `_n` variants must be followed
+ * by its length.
  */
 SENTRY_API void sentry_set_fingerprint(const char *fingerprint, ...);
 SENTRY_API void sentry_set_fingerprint_n(
@@ -2890,6 +2953,12 @@ typedef struct sentry_transaction_s sentry_transaction_t;
  * that same transaction. In case the transaction should be discarded, the
  * callback needs to call `sentry_value_decref` on the provided transaction and
  * return a `sentry_value_new_null()` instead.
+ *
+ * This function may be invoked inside a signal handler and must be safe for
+ * that purpose, see https://man7.org/linux/man-pages/man7/signal-safety.7.html.
+ * On Windows, it may be called from inside a `UnhandledExceptionFilter`, see
+ * the documentation on SEH (structured exception handling) for more information
+ * https://docs.microsoft.com/en-us/windows/win32/debug/structured-exception-handling
  */
 typedef sentry_value_t (*sentry_transaction_function_t)(
     sentry_value_t transaction, void *user_data);

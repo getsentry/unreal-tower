@@ -46,6 +46,8 @@ public:
 
 	uint32 GetFramerate() const { return Framerate; }
 
+	bool IsEncodingDisabled() const { return bEncodingDisabled; }
+
 	// FRunnable
 	virtual bool Init() override;
 	virtual void Stop() override;
@@ -60,6 +62,13 @@ private:
 
 	// Pulls available packets from the encoder, converts them to AVCC samples and emits a fragment at each keyframe boundary
 	void DrainPackets();
+
+	// Tears down the current encoder and resets per-encoder state so the next frame
+	// re-baselines against a fresh VT timestamp origin and republishes a new init
+	// segment. Used to avoid uint32 overflow of the SendFrame timestamp (~71 min of
+	// microseconds on Mac, ~49 days of milliseconds on Windows). Must be called only
+	// from the encoder thread
+	void Restart();
 
 	FSentrySessionReplayRecorder& Recorder;
 
