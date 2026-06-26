@@ -17,6 +17,7 @@
 @class SentryObjCLogger;
 @class SentryObjCMetricsApi;
 @class SentryObjCOptions;
+@class SentryObjCInternalApi;
 @class SentryObjCReplayApi;
 @class SentryObjCScope;
 @class SentryObjCSpan;
@@ -43,6 +44,9 @@ NS_ASSUME_NONNULL_BEGIN
 /// API to record metrics (counters, distributions, gauges).
 @property (class, nonatomic, readonly) SentryObjCMetricsApi *metrics;
 
+/// API to access internal SDK features for hybrid SDKs (React Native, Flutter, .NET, Unity).
+@property (class, nonatomic, readonly) SentryObjCInternalApi *internal;
+
 /**
  * Returns the crash status of the last program execution.
  *
@@ -59,12 +63,14 @@ NS_ASSUME_NONNULL_BEGIN
  */
 @property (class, nonatomic, readonly) BOOL detectedStartUpCrash;
 
+#if !SDK_V10
 /**
  * Checks if the last program execution terminated with a crash.
  * @deprecated Use @c lastRunStatus instead.
  */
 @property (class, nonatomic, readonly) BOOL crashedLastRun
     __attribute__((deprecated("Use lastRunStatus instead.")));
+#endif
 
 #if SENTRY_OBJC_REPLAY_SUPPORTED
 /// API to control session replay.
@@ -354,6 +360,37 @@ NS_ASSUME_NONNULL_BEGIN
  * https://docs.sentry.io/platforms/cocoa/performance/instrumentation/automatic-instrumentation/#time-to-full-display
  */
 + (void)reportFullyDisplayed;
+
+#if !SENTRY_NO_UI_FRAMEWORK && (TARGET_OS_IOS || TARGET_OS_TV || TARGET_OS_VISION)
+/**
+ * Extends the app launch measurement beyond the default end point.
+ *
+ * Call this method after @c startWithOptions: but before the @c didFinishLaunching notification
+ * is posted so the SDK doesn't finish the app start transaction automatically.
+ *
+ * Use @c getExtendedAppStartSpan to retrieve the span and add child spans that break down the
+ * extended launch period. Call @c finish on that span (or call @c finishExtendedAppStart) when
+ * the app is fully launched.
+ *
+ * @note This only has an effect when Standalone App Start tracing is enabled.
+ */
++ (void)extendAppStart;
+
+/**
+ * Returns the extended app start span, or @c nil if @c extendAppStart was not called,
+ * the SDK is not started, or the app start transaction was already created.
+ */
++ (nullable SentryObjCSpan *)getExtendedAppStartSpan;
+
+/**
+ * Finishes a previously extended app launch and sends the app start transaction.
+ *
+ * This is equivalent to calling @c finish on the span returned by @c getExtendedAppStartSpan.
+ * If @c extendAppStart was not called, or the extended launch was already finished, this method
+ * does nothing.
+ */
++ (void)finishExtendedAppStart;
+#endif
 
 /**
  * Pauses sending detected app hangs to Sentry.

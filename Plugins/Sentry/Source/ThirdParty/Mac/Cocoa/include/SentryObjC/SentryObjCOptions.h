@@ -20,6 +20,7 @@
 @class SentryObjCSamplingContext;
 @class SentryObjCScope;
 @class SentryObjCSpan;
+@class SentryObjCUserFeedbackConfiguration;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -145,6 +146,7 @@ NS_ASSUME_NONNULL_BEGIN
  */
 @property (nonatomic, copy, nullable) BOOL (^beforeCaptureViewHierarchy)(SentryObjCEvent *);
 
+#if !SDK_V10
 /**
  * A block called shortly after the initialization of the SDK when the last program execution
  * terminated with a crash.
@@ -154,6 +156,7 @@ NS_ASSUME_NONNULL_BEGIN
  */
 @property (nonatomic, copy, nullable) void (^onCrashedLastRun)(SentryObjCEvent *)
     __attribute__((deprecated("Use onLastRunStatusDetermined instead.")));
+#endif
 
 /**
  * A block called shortly after the initialization of the SDK when the crash status of the
@@ -257,6 +260,17 @@ NS_ASSUME_NONNULL_BEGIN
  * @note The default simply returns the passed in scope.
  */
 @property (nonatomic, copy) SentryObjCScope * (^initialScope)(SentryObjCScope *);
+
+#if TARGET_OS_IOS && SENTRY_OBJC_HAS_UIKIT
+
+/**
+ * A block that configures the user feedback feature.
+ */
+@property (nonatomic, copy, nullable) void (^configureUserFeedback)
+    (SentryObjCUserFeedbackConfiguration *configuration)
+        NS_EXTENSION_UNAVAILABLE("Not available in app extensions.");
+
+#endif
 
 /**
  * When enabled, the SDK tracks performance for HTTP requests if auto performance tracking and

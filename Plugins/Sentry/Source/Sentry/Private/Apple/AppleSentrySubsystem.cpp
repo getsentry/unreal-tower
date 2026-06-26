@@ -463,6 +463,11 @@ bool FAppleSentrySubsystem::IsHangTrackingSupported() const
 	return false;
 }
 
+bool FAppleSentrySubsystem::IsNativeHangTrackingEnabled() const
+{
+	return false;
+}
+
 void FAppleSentrySubsystem::CaptureFeedback(TSharedPtr<ISentryFeedback> feedback)
 {
 	TSharedPtr<FAppleSentryFeedback> feedbackApple = StaticCastSharedPtr<FAppleSentryFeedback>(feedback);
@@ -716,12 +721,10 @@ void FAppleSentrySubsystem::UploadScreenshotForEvent(TSharedPtr<ISentryId> event
 
 void FAppleSentrySubsystem::UploadGameLogForEvent(TSharedPtr<ISentryId> eventId, const FString& logFilePath) const
 {
-#if NO_LOGGING
 	// If writing logs to a file is disabled (i.e. default behavior for Shipping builds) skip the upload
-	return;
-#endif
-
+#if !NO_LOGGING
 	UploadAttachmentForEvent(eventId, logFilePath, SentryFileUtils::GetGameLogName());
+#endif
 }
 
 void FAppleSentrySubsystem::UploadSessionReplayForEvent(TSharedPtr<ISentryId> eventId, const FString& replayPath) const
