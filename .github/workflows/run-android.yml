@@ -29,7 +29,7 @@ jobs:
         id: get-run
         shell: pwsh
         run: |
-          $runs = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/actions/workflows/build-demo.yml/runs?status=success&per_page=1" -Headers @{Authorization="Bearer ${{ secrets.GITHUB_TOKEN }}"}
+          $runs = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/actions/workflows/build.yml/runs?status=success&per_page=1" -Headers @{Authorization="Bearer ${{ secrets.GITHUB_TOKEN }}"}
           $runId = $runs.workflow_runs[0].id
           echo "run-id=$runId" >> $env:GITHUB_OUTPUT
 
