@@ -1,0 +1,49 @@
+name: run-android
+
+on:
+  workflow_call:
+
+jobs:
+  run:
+    name: Run Demo (Android)
+    runs-on: ubuntu-latest
+
+    env:
+      SAUCE_USERNAME: ${{ secrets.SAUCE_USERNAME }}
+      SAUCE_ACCESS_KEY: ${{ secrets.SAUCE_ACCESS_KEY }}
+      SAUCE_REGION: us-west-1
+      SAUCE_DEVICE_NAME: Samsung_Galaxy_S23_15_real_sjc1
+      SAUCE_SESSION_NAME: SentryTower Android Demo Run
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out app-runner
+        uses: actions/checkout@v4
+        with:
+          repository: getsentry/app-runner
+          ref: 8be06e220d490e527b810f6d073872025bf491b3
+          path: app-runner
+
+      - name: Get latest build run
+        id: get-run
+        shell: pwsh
+        run: |
+          $runs = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/actions/workflows/build-demo.yml/runs?status=success&per_page=1" -Headers @{Authorization="Bearer ${{ secrets.GITHUB_TOKEN }}"}
+          $runId = $runs.workflow_runs[0].id
+          echo "run-id=$runId" >> $env:GITHUB_OUTPUT
+
+      - name: Download SentryTower
+        id: download
+        uses: actions/download-artifact@v4
+        with:
+          name: SentryTower-Android
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.get-run.outputs.run-id }}
+
+      - name: Run on SauceLabs
+        shell: pwsh
+        env:
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+        run: ./.github/scripts/run-demo-android.ps1 -ApkDir "${{ steps.download.outputs.download-path }}"

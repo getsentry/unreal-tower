@@ -1,0 +1,64 @@
+name: run-linux
+
+on:
+  workflow_call:
+
+jobs:
+  run:
+    name: Run Demo (Linux)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Get latest build run
+        id: get-run
+        shell: pwsh
+        run: |
+          $runs = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/actions/workflows/build-demo.yml/runs?status=success&per_page=1" -Headers @{Authorization="Bearer ${{ secrets.GITHUB_TOKEN }}"}
+          $runId = $runs.workflow_runs[0].id
+          echo "run-id=$runId" >> $env:GITHUB_OUTPUT
+
+      - name: Download SentryTower
+        id: download
+        uses: actions/download-artifact@v4
+        with:
+          name: SentryTower-Linux
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.get-run.outputs.run-id }}
+
+      - name: Run Simulation
+        env:
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+        run: |
+          DL="${{ steps.download.outputs.download-path }}"
+          echo "Download path: $DL"
+          ls "$DL"
+
+          if [ ! -f "$DL/SentryTower.sh" ]; then
+            echo "::error::SentryTower.sh not found at: $DL"
+            exit 1
+          fi
+
+          # Artifacts don't preserve the executable bit
+          chmod -R +x "$DL"
+
+          # Start a dummy spectator client in the background to emulate multiplayer setup required for network traffic generation
+          echo "Starting spectator client..."
+          "$DL/SentryTower.sh" -Unattended -nullrhi 127.0.0.1:7777 &
+          CLIENT_PID=$!
+
+          # Run game as a listen server to which the spectator client can connect
+          echo "Running: SentryTower.sh -Unattended -nullrhi --idle"
+          set +e
+          "$DL/SentryTower.sh" -Unattended -nullrhi --idle "/Game/Maps/Main?listen" -port=7777
+          EXIT_CODE=$?
+          set -e
+          echo "Process completed. Exit code: $EXIT_CODE"
+
+          kill $CLIENT_PID 2>/dev/null || true
+
+          if [ $EXIT_CODE -eq 0 ]; then
+            echo "::error::Expected non-zero exit code but got 0"
+            exit 1
+          fi
+          echo "Simulation completed with expected non-zero exit code: $EXIT_CODE"

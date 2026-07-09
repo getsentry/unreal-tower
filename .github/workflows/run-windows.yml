@@ -1,0 +1,64 @@
+name: run-windows
+
+on:
+  workflow_call:
+
+jobs:
+  run:
+    name: Run Demo (Windows)
+    runs-on: windows-latest
+
+    steps:
+      - name: Get latest build run
+        id: get-run
+        run: |
+          $runs = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/actions/workflows/build-demo.yml/runs?status=success&per_page=1" -Headers @{Authorization="Bearer ${{ secrets.GITHUB_TOKEN }}"}
+          $runId = $runs.workflow_runs[0].id
+          echo "run-id=$runId" >> $env:GITHUB_OUTPUT
+
+      - name: Download SentryTower
+        id: download
+        uses: actions/download-artifact@v4
+        with:
+          name: SentryTower
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.get-run.outputs.run-id }}
+
+      - name: Run Simulation
+        env:
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+        run: |
+          $downloadPath = "${{ steps.download.outputs.download-path }}"
+          Write-Output "Download path: $downloadPath"
+
+          # List files in download path
+          Write-Output "Files in download path:"
+          Get-ChildItem $downloadPath
+
+          $exePath = Join-Path $downloadPath "SentryTower.exe"
+          if (!(Test-Path $exePath)) {
+            Write-Error "SentryTower.exe not found at: $exePath"
+            exit 1
+          }
+
+          # Start a dummy spectator client in the background to emulate multiplayer setup required for network traffic generation
+          Write-Output "Starting spectator client..."
+          $client = Start-Process -FilePath $exePath -ArgumentList "-Unattended", "-nullrhi", "127.0.0.1:7777" -PassThru -WindowStyle Hidden
+
+          # Run game as a listen server to which the spectator client can connect
+          Write-Output "Running: $exePath -Unattended -nullrhi --idle"
+          $server = Start-Process -FilePath $exePath -ArgumentList "-Unattended", "-nullrhi", "--idle", "/Game/Maps/Main?listen", "-port=7777" -Wait -PassThru -NoNewWindow
+          $exitCode = $server.ExitCode
+          Write-Output "Process completed. Exit code: $exitCode"
+
+          if (!$client.HasExited) {
+            Write-Output "Stopping spectator client..."
+            Stop-Process -Id $client.Id -Force -ErrorAction SilentlyContinue
+          }
+
+          if ($exitCode -eq 0) {
+            Write-Error "Expected non-zero exit code but got 0"
+            exit 1
+          }
+          Write-Output "Simulation completed with expected non-zero exit code: $exitCode"
