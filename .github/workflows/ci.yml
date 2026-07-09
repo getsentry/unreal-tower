@@ -4,29 +4,16 @@ on:
   schedule:
     - cron: '0 6 * * *' # daily
   workflow_dispatch:
-    inputs:
-      platforms:
-        description: 'Platforms to build'
-        type: choice
-        default: all
-        options:
-          - all
-          - windows
-          - linux
-          - android
 
 jobs:
   build-windows:
-    if: ${{ github.event_name != 'workflow_dispatch' || contains(fromJSON('["all","windows"]'), inputs.platforms) }}
     uses: ./.github/workflows/build-windows.yml
     secrets: inherit
 
   build-linux:
-    if: ${{ github.event_name != 'workflow_dispatch' || contains(fromJSON('["all","linux"]'), inputs.platforms) }}
     uses: ./.github/workflows/build-linux.yml
     secrets: inherit
 
   build-android:
-    if: ${{ github.event_name != 'workflow_dispatch' || contains(fromJSON('["all","android"]'), inputs.platforms) }}
     uses: ./.github/workflows/build-android.yml
     secrets: inherit
