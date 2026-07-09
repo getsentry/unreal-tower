@@ -41,8 +41,8 @@ try {
     Write-Host 'Installing APK...'
     Install-DeviceApp -Path $apk.FullName
 
-    Write-Host 'Run 1: launching game, waiting for intentional crash...'
-    $crashRun = Invoke-DeviceApp -ExecutablePath $activity -Arguments "-e cmdline $dsnArg"
+    Write-Host 'Run 1: launching game simulation, waiting for intentional crash...'
+    $crashRun = Invoke-DeviceApp -ExecutablePath $activity -Arguments "-e cmdline --idle\ $dsnArg"
     Write-Host "Run 1 finished (exit code: $($crashRun.ExitCode))"
 
     Write-Host 'Run 2: relaunching in upload-only mode to flush the crash report...'
