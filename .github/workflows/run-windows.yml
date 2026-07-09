@@ -1,4 +1,4 @@
-name: run-windows
+name: Run Demo (Windows)
 
 on:
   workflow_call:

@@ -1,4 +1,4 @@
-name: build-android
+name: Build Demo (Android)
 
 on:
   workflow_call:

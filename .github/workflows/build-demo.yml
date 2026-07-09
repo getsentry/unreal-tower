@@ -1,4 +1,4 @@
-name: build-demo
+name: Build Demo
 
 on:
   schedule:

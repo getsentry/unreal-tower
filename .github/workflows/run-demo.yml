@@ -1,4 +1,4 @@
-name: run-demo
+name: Run Demo
 
 on:
   schedule: # Run every 50 minutes

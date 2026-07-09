@@ -1,4 +1,4 @@
-name: run-android
+name: Run Demo (Android)
 
 on:
   workflow_call:

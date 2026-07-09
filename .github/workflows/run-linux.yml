@@ -1,4 +1,4 @@
-name: run-linux
+name: Run Demo (Linux)
 
 on:
   workflow_call:

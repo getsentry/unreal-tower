@@ -1,4 +1,4 @@
-name: build-windows
+name: Build Demo (Windows)
 
 on:
   workflow_call:
