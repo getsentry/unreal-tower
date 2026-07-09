@@ -1,0 +1,127 @@
+name: build-linux
+
+on:
+  workflow_call:
+
+env:
+  REGISTRY: ghcr.io
+  UE_VERSION: 5.7
+
+jobs:
+  build:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: checkout
+          submodules: recursive
+
+      - name: Free up disk space
+        run: ./checkout/.github/scripts/clean-storage-linux.sh
+
+      - name: Move Docker data root to /mnt
+        # The UE docker image is too large for the runner's root disk; the Azure
+        # temp disk mounted at /mnt has more headroom.
+        run: |
+          sudo systemctl stop docker
+          sudo mkdir -p /mnt/docker
+          echo '{"data-root":"/mnt/docker"}' | sudo tee /etc/docker/daemon.json
+          sudo systemctl start docker
+          df -h / /mnt
+
+      - name: Log in to GitHub package registry
+        uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.GH_USERNAME }}
+          password: ${{ secrets.PAT_TOKEN }}
+
+      - name: Start Docker container
+        env:
+          WORKSPACE_PATH: ${{ github.workspace }}
+        run: |
+          # Start the container with the user ID of the GH action user to avoid permission issues on the volume.
+          uid=$(id -u) # the GH action user ID
+          gid=1000     # the ue4 group in the docker container
+          user='gh'
+          set -x
+          docker network create --ipv6 --subnet 2001:0DB8::/112 ip6net
+          docker run -td \
+            --name unreal \
+            --volume "$WORKSPACE_PATH:/workspace" \
+            --workdir /workspace \
+            --user $uid:$gid \
+            --env HOME="/home/$user" \
+            --env PATH="/home/$user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+            --network ip6net -p 80:80 \
+            ghcr.io/getsentry/unreal-docker:"$UE_VERSION"-linux
+          docker logout ghcr.io
+          # Add the user so it has a home directory
+          docker exec --user root unreal useradd -u $uid -g $gid --create-home $user
+          # Ensure CA certs are in the right directory
+          docker exec --user root unreal bash -c "
+            mkdir -p /etc/pki/tls/certs ;
+            cp /etc/ssl/certs/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt "
+
+      # Chown some paths to the GH user to make UE5 work properly. We can't just chown the whole UnrealEngine or
+      # docker would implicitly have to copy it to the container and we would run out of space on the GH runner.
+      - name: Chown Docker container paths
+        run: |
+          uid=$(id -u) # the GH action user ID
+          docker exec --user root unreal bash -c "
+            chown -R $uid /home/ue4/.config/Epic/UnrealEngine/XmlConfigCache-+home+ue4+UnrealEngine.bin ;
+            mkdir -p /home/ue4/.config/Epic/UnrealBuildTool && chown -R $uid /home/ue4/.config/Epic/UnrealBuildTool ;
+            mkdir -p /tmp/uba_shm_locks && chown -R $uid /tmp/uba_shm_locks ;
+            chown -R $uid /home/ue4/UnrealEngine/Engine/Binaries/ThirdParty/Mono/Linux ;
+            chown -R $uid /home/ue4/UnrealEngine/Engine/Binaries/ThirdParty/DotNet ;
+            chown -R $uid /home/ue4/UnrealEngine/Engine/Binaries/ThirdParty/USD/UsdResources/Linux ;
+            mkdir -p /home/ue4/UnrealEngine/Epic/UnrealEngine && chown -R $uid /home/ue4/UnrealEngine/Epic ;
+            mkdir -p /home/ue4/UnrealEngine/Engine/Source/Epic/UnrealEngine && chown -R $uid /home/ue4/UnrealEngine/Engine/Source/Epic ;
+            mkdir -p /home/ue4/UnrealEngine/Engine/Intermediate/Build/BuildCookRun && chown -R $uid /home/ue4/UnrealEngine/Engine/Intermediate/Build/BuildCookRun "
+
+      - name: Set permissions for project
+        run: docker exec unreal chmod -R +x /workspace/checkout
+
+      - name: Set execute permission for Python3
+        # Python3 is needed for the post-build symbol upload script
+        run: docker exec --user root unreal chmod +x /home/ue4/UnrealEngine/Engine/Binaries/ThirdParty/Python3/Linux/bin/python3
+
+      - name: Build game
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        run: |
+          docker exec -w /workspace/checkout \
+            -e SENTRY_AUTH_TOKEN="$SENTRY_AUTH_TOKEN" \
+            -e SENTRY_ORG="$SENTRY_ORG" \
+            -e SENTRY_PROJECT="$SENTRY_PROJECT" \
+            unreal /home/ue4/UnrealEngine/Engine/Build/BatchFiles/RunUAT.sh BuildCookRun \
+            -project=/workspace/checkout/SentryTower.uproject \
+            -archivedirectory=/workspace/checkout/Builds \
+            -platform=Linux \
+            -UBTArgs="-AllCores" \
+            -nop4 \
+            -cook \
+            -build \
+            -stage \
+            -prereqs \
+            -package \
+            -archive
+
+      - name: Collect build logs on failure
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: SentryTower-Linux-build-logs
+          path: checkout/Saved/Logs
+
+      - name: Upload SentryTower
+        uses: actions/upload-artifact@v4
+        with:
+          name: SentryTower-Linux
+          path: checkout/Builds/Linux/
+          retention-days: 90
