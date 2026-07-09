@@ -16,10 +16,10 @@ jobs:
       SAUCE_SESSION_NAME: SentryTower Android Demo Run
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Check out app-runner
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           repository: getsentry/app-runner
           ref: 8be06e220d490e527b810f6d073872025bf491b3
@@ -35,7 +35,7 @@ jobs:
 
       - name: Download SentryTower
         id: download
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: SentryTower-Android
           github-token: ${{ secrets.GITHUB_TOKEN }}
