@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.16.0
+
+> [!IMPORTANT]
+> Gameplay clips captured around crashes are now integrated with [Session Replay](https://docs.sentry.io/product/explore/session-replay/) product and automatically linked to their corresponding crash events, letting you watch the final moments leading up to a crash directly in Sentry.
+>
+> This feature is experimental and disabled by default. To opt-in, turn on `Enable session replay` in plugin settings. See the [Unreal SDK Session Replay documentation](https://docs.sentry.io/platforms/unreal/session-replay/) for additional details and setup instructions.
+
+### Features
+
+- Add experimental session replay capturing on iOS (UE 5.8+) ([#1462](https://github.com/getsentry/sentry-unreal/pull/1462))
+- Add integration with Session Replay product for native platforms ([#1445](https://github.com/getsentry/sentry-unreal/pull/1445))
+- Add integration with Session Replay product for Apple platforms ([#1468](https://github.com/getsentry/sentry-unreal/pull/1468))
+- Link structured logs with captured session replays ([#1470](https://github.com/getsentry/sentry-unreal/pull/1470))
+
+### Fixes
+
+- Fix deprecation warnings caused by `RHICreateTexture` usage in UE 5.8 ([#1466](https://github.com/getsentry/sentry-unreal/pull/1466))
+
+### Dependencies
+
+- Bump Android Gradle Plugin from v6.12.0 to v6.14.0 ([#1452](https://github.com/getsentry/sentry-unreal/pull/1452), [#1460](https://github.com/getsentry/sentry-unreal/pull/1460))
+  - [changelog](https://github.com/getsentry/sentry-android-gradle-plugin/blob/main/CHANGELOG.md#6140)
+  - [diff](https://github.com/getsentry/sentry-android-gradle-plugin/compare/6.12.0...6.14.0)
+- Bump Java SDK from v8.45.0 to v8.48.0 ([#1453](https://github.com/getsentry/sentry-unreal/pull/1453), [#1461](https://github.com/getsentry/sentry-unreal/pull/1461), [#1469](https://github.com/getsentry/sentry-unreal/pull/1469))
+  - [changelog](https://github.com/getsentry/sentry-java/blob/main/CHANGELOG.md#8480)
+  - [diff](https://github.com/getsentry/sentry-java/compare/8.45.0...8.48.0)
+- Bump CLI from v3.5.1 to v3.6.0 ([#1454](https://github.com/getsentry/sentry-unreal/pull/1454))
+  - [changelog](https://github.com/getsentry/sentry-cli/blob/master/CHANGELOG.md#360)
+  - [diff](https://github.com/getsentry/sentry-cli/compare/3.5.1...3.6.0)
+- Bump Cocoa SDK from v9.19.0 to v9.20.0 ([#1459](https://github.com/getsentry/sentry-unreal/pull/1459), [#1464](https://github.com/getsentry/sentry-unreal/pull/1464))
+  - [changelog](https://github.com/getsentry/sentry-cocoa/blob/main/CHANGELOG.md#9200)
+  - [diff](https://github.com/getsentry/sentry-cocoa/compare/9.19.0...9.20.0)
+- Bump Native SDK from v0.15.2 to v0.15.3 ([#1465](https://github.com/getsentry/sentry-unreal/pull/1465))
+  - [changelog](https://github.com/getsentry/sentry-native/blob/master/CHANGELOG.md#0153)
+  - [diff](https://github.com/getsentry/sentry-native/compare/0.15.2...0.15.3)
+
 ## 1.15.0
 
 ### Features
