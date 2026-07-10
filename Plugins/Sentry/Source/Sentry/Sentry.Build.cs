@@ -38,6 +38,7 @@ public class Sentry : ModuleRules
 				"SlateCore",
 				"Projects",
 				"Json",
+				"JsonUtilities",
 				"HTTP"
 				// ... add private dependencies that you statically link with here ...	
 			}
@@ -251,8 +252,7 @@ public class Sentry : ModuleRules
 			}
 		}
 
-		if (bAttachSessionReplay && IsPluginEnabled(Target, "AVCodecsCore") &&
-			(Target.Platform == UnrealTargetPlatform.Win64 || Target.Platform == UnrealTargetPlatform.Mac || Target.Platform == UnrealTargetPlatform.Linux))
+		if (bAttachSessionReplay && IsSessionReplaySupported(Target) && IsPluginEnabled(Target, "AVCodecsCore"))
 		{
 			PrivateDependencyModuleNames.AddRange(new string[]
 			{
@@ -286,6 +286,21 @@ public class Sentry : ModuleRules
 			}
 		}
 		return false;
+	}
+
+	private bool IsSessionReplaySupported(ReadOnlyTargetRules Target)
+	{
+		// On Windows/Linux Arm64, session replay capturing is not supported
+		// On Android, session replay capturing is handled by sentry-java
+
+#if UE_5_8_OR_LATER
+		if (Target.Platform == UnrealTargetPlatform.IOS)
+		{
+			return true;
+		}
+#endif
+
+		return Target.Platform == UnrealTargetPlatform.Win64 || Target.Platform == UnrealTargetPlatform.Mac || Target.Platform == UnrealTargetPlatform.Linux;
 	}
 
 	private void StageCrashReporterResources(ReadOnlyTargetRules Target)
