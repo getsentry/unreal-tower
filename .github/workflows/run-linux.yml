@@ -26,6 +26,43 @@ jobs:
           repository: ${{ github.repository }}
           run-id: ${{ steps.get-run.outputs.run-id }}
 
+      - name: Check out sentry-cli
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          sparse-checkout: Plugins/Sentry/Source/ThirdParty/CLI
+          sparse-checkout-cone-mode: false
+          path: repo
+
+      - name: Upload libc debug symbols
+        # The runner's system libc is what gets mapped at crash time, so install
+        # its matching debug companion and upload it. Sentry matches debug files
+        # by GNU build-id, so this stays correct as the runner image's glibc updates.
+        env:
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Install debug info for the exact libc6 version already installed
+          LIBC_VERSION=$(dpkg-query -W -f='${Version}' libc6)
+          echo "Installed libc6 version: $LIBC_VERSION"
+          sudo apt-get update
+          sudo apt-get install -y "libc6-dbg=${LIBC_VERSION}"
+
+          LIBC=/lib/x86_64-linux-gnu/libc.so.6
+          BUILD_ID=$(file "$LIBC" | grep -oE 'BuildID\[sha1\]=[0-9a-f]+' | cut -d= -f2)
+          echo "Loaded libc build-id: $BUILD_ID"
+          DBG="/usr/lib/debug/.build-id/${BUILD_ID:0:2}/${BUILD_ID:2}.debug"
+          if [ ! -f "$DBG" ]; then
+            echo "::error::libc debug file not found at $DBG"
+            exit 1
+          fi
+          echo "Matched debug file: $DBG"
+
+          CLI=repo/Plugins/Sentry/Source/ThirdParty/CLI/sentry-cli-Linux-x86_64
+          chmod +x "$CLI"
+          "$CLI" debug-files upload --log-level info /usr/lib/debug/.build-id/
+
       - name: Run Simulation
         env:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}

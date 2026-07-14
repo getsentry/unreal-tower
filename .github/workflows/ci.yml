@@ -6,14 +6,16 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-windows:
-    uses: ./.github/workflows/build-windows.yml
-    secrets: inherit
+  # TEMPORARY: Windows and Android builds disabled to speed up testing the
+  # Linux libc symbol upload. Restore before merging.
+  # build-windows:
+  #   uses: ./.github/workflows/build-windows.yml
+  #   secrets: inherit
 
   build-linux:
     uses: ./.github/workflows/build-linux.yml
     secrets: inherit
 
-  build-android:
-    uses: ./.github/workflows/build-android.yml
-    secrets: inherit
+  # build-android:
+  #   uses: ./.github/workflows/build-android.yml
+  #   secrets: inherit
