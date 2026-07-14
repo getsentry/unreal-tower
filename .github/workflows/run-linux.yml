@@ -33,37 +33,20 @@ jobs:
           sparse-checkout-cone-mode: false
           path: repo
 
-      - name: Upload libc debug symbols
-        # The runner's system libc is what gets mapped at crash time. Upload both
-        # its debug companion (symbols, from libc6-dbg) and the runtime object
-        # (unwind info in .eh_frame, kept only in the stripped .so). Sentry matches
-        # by GNU build-id, so this stays correct as the runner's glibc updates.
+      - name: Upload system libc debug info
+        # Symbolicate native crash frames in the runner's libc: libc6-dbg supplies
+        # symbols, the runtime .so supplies unwind info (matched by GNU build-id).
         env:
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: |
           set -euo pipefail
-          # Install debug info for the exact libc6 version already installed
-          LIBC_VERSION=$(dpkg-query -W -f='${Version}' libc6)
-          echo "Installed libc6 version: $LIBC_VERSION"
           sudo apt-get update
-          sudo apt-get install -y "libc6-dbg=${LIBC_VERSION}"
-
-          LIBC=/lib/x86_64-linux-gnu/libc.so.6
-          BUILD_ID=$(file "$LIBC" | grep -oE 'BuildID\[sha1\]=[0-9a-f]+' | cut -d= -f2)
-          echo "Loaded libc build-id: $BUILD_ID"
-          DBG="/usr/lib/debug/.build-id/${BUILD_ID:0:2}/${BUILD_ID:2}.debug"
-          if [ ! -f "$DBG" ]; then
-            echo "::error::libc debug file not found at $DBG"
-            exit 1
-          fi
-          echo "Matched debug file: $DBG"
-
+          sudo apt-get install -y "libc6-dbg=$(dpkg-query -W -f='${Version}' libc6)"
           CLI=repo/Plugins/Sentry/Source/ThirdParty/CLI/sentry-cli-Linux-x86_64
           chmod +x "$CLI"
-          # Debug companion provides symbols; the runtime .so provides unwind info.
-          "$CLI" debug-files upload --log-level info "$DBG" "$LIBC"
+          "$CLI" debug-files upload /usr/lib/debug /lib/x86_64-linux-gnu/libc.so.6
 
       - name: Run Simulation
         env:
