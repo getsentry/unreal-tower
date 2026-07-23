@@ -1,5 +1,50 @@
 # Changelog
 
+## 1.17.0
+
+### Features
+
+- Include the crash event's breadcrumbs in crash session replays on Apple platforms (Cocoa backend), so breadcrumbs from the replay window show up on the replay timeline ([#1480](https://github.com/getsentry/sentry-unreal/pull/1480))
+
+### Fixes
+
+- Decrease max session replay clip duration to 20 seconds to prevent replays from being rejected due to the server-side 10 MiB size limit, which could be exceeded at high rendering resolutions ([#1478](https://github.com/getsentry/sentry-unreal/pull/1478))
+- Maximize telemetry buffers for native platforms to minimize queue overflows ([#1483](https://github.com/getsentry/sentry-unreal/pull/1483))
+- Grant execute permissions to bundled crash handler binaries (Linux/Mac) ([#1486](https://github.com/getsentry/sentry-unreal/pull/1486))
+
+### Dependencies
+
+- Bump Android Gradle Plugin from v6.14.0 to v6.15.0 ([#1482](https://github.com/getsentry/sentry-unreal/pull/1482))
+  - [changelog](https://github.com/getsentry/sentry-android-gradle-plugin/blob/main/CHANGELOG.md#6150)
+  - [diff](https://github.com/getsentry/sentry-android-gradle-plugin/compare/6.14.0...6.15.0)
+- Bump Java SDK from v8.48.0 to v8.49.0 ([#1481](https://github.com/getsentry/sentry-unreal/pull/1481))
+  - [changelog](https://github.com/getsentry/sentry-java/blob/main/CHANGELOG.md#8490)
+  - [diff](https://github.com/getsentry/sentry-java/compare/8.48.0...8.49.0)
+- Bump Cocoa SDK from v9.21.0 to v9.22.0 ([#1477](https://github.com/getsentry/sentry-unreal/pull/1477))
+  - [changelog](https://github.com/getsentry/sentry-cocoa/blob/main/CHANGELOG.md#9220)
+  - [diff](https://github.com/getsentry/sentry-cocoa/compare/9.21.0...9.22.0)
+- Bump Native SDK from v0.15.3 to v0.15.4 ([#1488](https://github.com/getsentry/sentry-unreal/pull/1488))
+  - [changelog](https://github.com/getsentry/sentry-native/blob/master/CHANGELOG.md#0154)
+  - [diff](https://github.com/getsentry/sentry-native/compare/0.15.3...0.15.4)
+- Bump CLI from v3.6.0 to v3.6.1 ([#1489](https://github.com/getsentry/sentry-unreal/pull/1489))
+  - [changelog](https://github.com/getsentry/sentry-cli/blob/master/CHANGELOG.md#361)
+  - [diff](https://github.com/getsentry/sentry-cli/compare/3.6.0...3.6.1)
+
+## 1.16.1
+
+### Fixes
+
+- Fix structured logs and metrics not being linked with captured native crashes on Android ([#1475](https://github.com/getsentry/sentry-unreal/pull/1475))
+
+### Dependencies
+
+- Bump Cocoa SDK from v9.20.0 to v9.21.0 ([#1471](https://github.com/getsentry/sentry-unreal/pull/1471))
+  - [changelog](https://github.com/getsentry/sentry-cocoa/blob/main/CHANGELOG.md#9210)
+  - [diff](https://github.com/getsentry/sentry-cocoa/compare/9.20.0...9.21.0)
+- Bump Crash Reporter from v0.3.2 to v0.3.3 ([#1476](https://github.com/getsentry/sentry-unreal/pull/1476))
+  - [changelog](https://github.com/getsentry/sentry-desktop-crash-reporter/blob/main/CHANGELOG.md#033)
+  - [diff](https://github.com/getsentry/sentry-desktop-crash-reporter/compare/0.3.2...0.3.3)
+
 ## 1.16.0
 
 > [!IMPORTANT]
