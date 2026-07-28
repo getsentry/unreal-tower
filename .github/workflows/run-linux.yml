@@ -33,20 +33,20 @@ jobs:
           sparse-checkout-cone-mode: false
           path: repo
 
-      - name: Upload system libc debug info
-        # Symbolicate native crash frames in the runner's libc: libc6-dbg supplies
-        # symbols, the runtime .so supplies unwind info (matched by GNU build-id).
+      - name: Upload system libc for crash symbolication
+        # The runtime .so carries the GNU build-id and unwind info Sentry needs to
+        # process libc frames in crash reports. Full debug symbols (libc6-dbg) would
+        # only improve naming inside libc frames, and installing them pinned to the
+        # runner's libc version breaks whenever the apt archive moves on.
         env:
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y "libc6-dbg=$(dpkg-query -W -f='${Version}' libc6)"
           CLI=repo/Plugins/Sentry/Source/ThirdParty/CLI/sentry-cli-Linux-x86_64
           chmod +x "$CLI"
-          "$CLI" debug-files upload /usr/lib/debug /lib/x86_64-linux-gnu/libc.so.6
+          "$CLI" debug-files upload /lib/x86_64-linux-gnu/libc.so.6
 
       - name: Run Simulation
         env:
