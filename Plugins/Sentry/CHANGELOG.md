@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.18.0
+
+### Features
+
+- Add app-hang tracking via NDK game-thread heartbeat on Android ([#1497](https://github.com/getsentry/sentry-unreal/pull/1497))
+
+### Fixes
+
+- Increase the crash handler thread stack guarantee to 128 KiB on Windows to make stack-overflow crash capture more reliable ([#1500](https://github.com/getsentry/sentry-unreal/pull/1500))
+- Remove legacy session replay file attachment in favor of Session Replay envelope ([#1493](https://github.com/getsentry/sentry-unreal/pull/1493))
+
+### Dependencies
+
+- Bump CLI from v3.6.1 to v3.6.2 ([#1491](https://github.com/getsentry/sentry-unreal/pull/1491))
+  - [changelog](https://github.com/getsentry/sentry-cli/blob/master/CHANGELOG.md#362)
+  - [diff](https://github.com/getsentry/sentry-cli/compare/3.6.1...3.6.2)
+- Bump Cocoa SDK from v9.22.0 to v9.23.0 ([#1490](https://github.com/getsentry/sentry-unreal/pull/1490))
+  - [changelog](https://github.com/getsentry/sentry-cocoa/blob/main/CHANGELOG.md#9230)
+  - [diff](https://github.com/getsentry/sentry-cocoa/compare/9.22.0...9.23.0)
+- Bump Java SDK from v8.49.0 to v8.50.1 ([#1494](https://github.com/getsentry/sentry-unreal/pull/1494))
+  - [changelog](https://github.com/getsentry/sentry-java/blob/main/CHANGELOG.md#8501)
+  - [diff](https://github.com/getsentry/sentry-java/compare/8.49.0...8.50.1)
+- Bump Android Gradle Plugin from v6.15.0 to v6.16.0 ([#1495](https://github.com/getsentry/sentry-unreal/pull/1495))
+  - [changelog](https://github.com/getsentry/sentry-android-gradle-plugin/blob/main/CHANGELOG.md#6160)
+  - [diff](https://github.com/getsentry/sentry-android-gradle-plugin/compare/6.15.0...6.16.0)
+- Bump Native SDK from v0.15.4 to v0.16.0 ([#1499](https://github.com/getsentry/sentry-unreal/pull/1499))
+  - [changelog](https://github.com/getsentry/sentry-native/blob/master/CHANGELOG.md#0160)
+  - [diff](https://github.com/getsentry/sentry-native/compare/0.15.4...0.16.0)
+
 ## 1.17.0
 
 ### Features
