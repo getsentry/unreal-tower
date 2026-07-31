@@ -27,21 +27,11 @@
 			]
 		},
 		{
-			"Name": "Fab",
-			"Enabled": false,
+			"Name": "AMFCodecs",
+			"Enabled": true,
 			"SupportedTargetPlatforms": [
-				"Win64",
-				"Mac",
-				"Linux"
+				"Win64"
 			]
-		},
-		{
-			"Name": "WmfMedia",
-			"Enabled": false
-		},
-		{
-			"Name": "WindowsMoviePlayer",
-			"Enabled": false
 		},
 		{
 			"Name": "AVCodecsCore",
@@ -49,14 +39,9 @@
 			"SupportedTargetPlatforms": [
 				"Win64",
 				"Linux",
-				"Mac"
-			]
-		},
-		{
-			"Name": "AMFCodecs",
-			"Enabled": true,
-			"SupportedTargetPlatforms": [
-				"Win64"
+				"Mac",
+				"Android",
+				"IOS"
 			]
 		},
 		{
@@ -71,7 +56,8 @@
 			"Name": "VTCodecs",
 			"Enabled": true,
 			"SupportedTargetPlatforms": [
-				"Mac"
+				"Mac",
+				"IOS"
 			]
 		}
 	]
