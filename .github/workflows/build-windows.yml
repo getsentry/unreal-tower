@@ -5,7 +5,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  UE_VERSION: 5.7
+  UE_VERSION: 5.8
 
 jobs:
   build:
