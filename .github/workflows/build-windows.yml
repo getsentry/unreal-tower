@@ -49,7 +49,10 @@ jobs:
             -stage `
             -prereqs `
             -package `
-            -archive
+            -archive `
+            -pak `
+            -iostore `
+            -nozenstore
 
       - name: Upload SentryTower
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
