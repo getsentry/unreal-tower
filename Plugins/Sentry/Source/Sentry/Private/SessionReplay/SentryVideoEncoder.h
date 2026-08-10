@@ -20,6 +20,7 @@ class FRunnableThread;
 class FEvent;
 class FVideoResourceRHI;
 
+struct FSentryVideoFrame;
 class FSentrySessionReplayRecorder;
 
 /**
@@ -42,7 +43,7 @@ public:
 	void StopEncoder();
 
 	// Enqueues a texture for the encoder thread to process
-	void SubmitFrame(const FTextureRHIRef& Texture, double CaptureTimeSeconds);
+	void SubmitFrame(const TSharedPtr<FSentryVideoFrame, ESPMode::ThreadSafe>& Frame);
 
 	uint32 GetFramerate() const { return Framerate; }
 
@@ -57,14 +58,20 @@ public:
 	virtual void Exit() override;
 	virtual uint32 Run() override;
 
-	// Frames buffered for the encoder thread
-	static constexpr int32 MaxQueueDepth = 5;
-
 private:
 	// Checks if frame dimensions match with the app's fixed screen orientation
 	bool ShouldSwapDimensions(uint32 ResourceWidth, uint32 ResourceHeight) const;
 
 	bool EnsureEncoderOpen(uint32 ResourceWidth, uint32 ResourceHeight);
+
+	// Encodes one fence-ready frame and drains produced packets
+	void ProcessFrame(FSentryVideoFrame& Frame);
+
+	// Returns a cached FVideoResourceRHI wrapping Texture, creating one on first use
+	TSharedPtr<FVideoResourceRHI> AcquireVideoResource(const FTextureRHIRef& Texture);
+
+	// Releases every queued frame back to its pool slot and empties the queue
+	void DrainAndReleaseQueue();
 
 	// Pulls available packets from the encoder, converts them to AVCC samples and emits a fragment at each keyframe boundary
 	void DrainPackets();
@@ -90,11 +97,23 @@ private:
 
 	TSharedPtr<TVideoEncoder<FVideoResourceRHI>> Encoder;
 
+	struct FCachedVideoResource
+	{
+		FTextureRHIRef Texture;
+		TSharedPtr<FVideoResourceRHI> Resource;
+	};
+	TMap<FRHITexture*, FCachedVideoResource> ResourceCache;
+
 	bool bFirstFrameValidated = false;
 	FThreadSafeBool bEncodingDisabled;
 
 	int32 ConsecutiveSendFrameFailures = 0;
 	static constexpr int32 MaxConsecutiveSendFrameFailures = 30;
+
+	// Recheck cadence (ms) while waiting for a frame's GPU write fence to signal
+	static constexpr uint32 FencePollIntervalMs = 2;
+	// Idle wait (ms) when there is no work: encoding disabled or an empty queue
+	static constexpr uint32 IdlePollIntervalMs = 50;
 
 	// Capture config
 	uint32 Width = 0;
@@ -109,14 +128,8 @@ private:
 	FThreadSafeBool bStopRequested;
 
 	// Encoder thread frame queue
-	struct FPendingFrame
-	{
-		FTextureRHIRef Texture;
-		double CaptureTimeSeconds = 0.0;
-	};
-
 	FCriticalSection QueueLock;
-	TArray<FPendingFrame> PendingQueue;
+	TArray<TSharedPtr<FSentryVideoFrame, ESPMode::ThreadSafe>> PendingQueue;
 
 	// Timing (encoder-thread-only)
 	double CaptureTimeBaseSeconds = -1.0;

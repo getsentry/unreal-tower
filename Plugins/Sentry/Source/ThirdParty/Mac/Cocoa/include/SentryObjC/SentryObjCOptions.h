@@ -88,6 +88,18 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic) BOOL enableCrashHandler;
 
 /**
+ * When enabled, the SDK introspects memory contents during a crash.
+ * Any Objective-C objects or C strings near the stack pointer or referenced by
+ * CPU registers or exceptions will be recorded in the crash report, along with
+ * their contents. This can help diagnose crashes, but may include sensitive data in memory.
+ *
+ * Disabling this will also disable the automatic 'memory corruption' diagnosis for crashes.
+ *
+ * @note Default value is @c NO.
+ */
+@property (nonatomic) BOOL enableMemoryIntrospection;
+
+/**
  * How many breadcrumbs do you want to keep in memory?
  * @note Default is 100.
  */
@@ -233,11 +245,13 @@ NS_ASSUME_NONNULL_BEGIN
  */
 @property (nonatomic) NSUInteger maxAttachmentSize;
 
+#if !SDK_V10
 /**
  * When enabled, the SDK sends personal identifiable information along with events.
  * @note The default is @c NO.
  */
 @property (nonatomic) BOOL sendDefaultPii;
+#endif // !SDK_V10
 
 /**
  * When enabled, the SDK tracks performance for UIViewController subclasses and HTTP requests

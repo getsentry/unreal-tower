@@ -6,7 +6,9 @@
 
 #include "SentryDefines.h"
 #include "SentryVideoEncoder.h"
+#include "SentryVideoFrame.h"
 
+#include "DynamicRHI.h"
 #include "Framework/Application/SlateApplication.h"
 #include "GlobalShader.h"
 #include "HAL/PlatformTime.h"
@@ -24,7 +26,7 @@
 FSentryBackBufferCapture::FSentryBackBufferCapture(FSentryVideoEncoder& InEncoder)
 	: Encoder(InEncoder)
 {
-	EncoderPool.Slots.SetNum(FSentryVideoEncoder::MaxQueueDepth);
+	EncoderPool.SetNum(FramePoolSize);
 	CapturePeriodSeconds = 1.0 / static_cast<double>(FMath::Max(1u, Encoder.GetFramerate()));
 }
 
@@ -69,14 +71,11 @@ void FSentryBackBufferCapture::Stop()
 	// Ensure render thread is done with our textures before destruction
 	FlushRenderingCommands();
 
-	// Render thread is idle after the flush, so resetting the lock here is safe.
-	// A subsequent Start() will re-lock onto the first window it then sees.
-	LockedWindow = nullptr;
-
-	for (FTextureRHIRef& Slot : EncoderPool.Slots)
+	for (TSharedPtr<FSentryVideoFrame, ESPMode::ThreadSafe>& Slot : EncoderPool)
 	{
-		Slot.SafeRelease();
+		Slot.Reset();
 	}
+
 	Scratch.Texture.SafeRelease();
 	Converted.Texture.SafeRelease();
 }
@@ -103,13 +102,11 @@ void FSentryBackBufferCapture::OnBackBufferReadyToPresent_RenderThread(SWindow& 
 
 bool FSentryBackBufferCapture::AcceptWindow_RenderThread(const SWindow& SlateWindow)
 {
-	if (LockedWindow == nullptr)
-	{
-		LockedWindow = &SlateWindow;
-		UE_LOG(LogSentrySdk, Log, TEXT("Session replay: capture locked to the first presented window; other windows will be ignored."));
-	}
-
-	return LockedWindow == &SlateWindow;
+	// Capture only real top-level windows. Transient overlays - tooltips, popup
+	// menus, notification toasts, cursor decorators - present through the same hook
+	// but aren't gameplay, and their differing size would otherwise be handed to the
+	// encoder. IsRegularWindow() excludes exactly that class.
+	return SlateWindow.IsRegularWindow();
 }
 
 void FSentryBackBufferCapture::CaptureBackBuffer_RenderThread(const FTextureRHIRef& BackBuffer)
@@ -165,9 +162,6 @@ void FSentryBackBufferCapture::CaptureBackBuffer_RenderThread(const FTextureRHIR
 	constexpr ERHIAccess PoolInitialState = ERHIAccess::SRVGraphics;
 #endif
 
-	FTextureRHIRef EncoderTex = AcquireTexturePoolSlot_RenderThread(EncoderPool, W, H, PF_B8G8R8A8,
-		PoolFlags, PoolInitialState, TEXT("SentrySessionReplayCapture"));
-
 	if (!ScratchTex.IsValid())
 	{
 		return;
@@ -180,8 +174,22 @@ void FSentryBackBufferCapture::CaptureBackBuffer_RenderThread(const FTextureRHIR
 	}
 #endif
 
+	// Acquire the encoder frame only after the scratch/converted textures are
+	// known good, so an early return above never strands a slot in flight. No free
+	// slot means the encoder is still consuming every frame in the pool and this
+	// capture will be dropped
+	TSharedPtr<FSentryVideoFrame, ESPMode::ThreadSafe> EncoderFrame = AcquireFrame_RenderThread(W, H, PF_B8G8R8A8,
+		PoolFlags, PoolInitialState, TEXT("SentrySessionReplayCapture"));
+
+	if (!EncoderFrame.IsValid())
+	{
+		return;
+	}
+
+	FTextureRHIRef EncoderTex = EncoderFrame->Texture;
 	if (!EncoderTex.IsValid())
 	{
+		EncoderFrame->Release();
 		return;
 	}
 
@@ -247,7 +255,12 @@ void FSentryBackBufferCapture::CaptureBackBuffer_RenderThread(const FTextureRHIR
 	RHICmdList.Transition(FRHITransitionInfo(EncoderTex.GetReference(), ERHIAccess::Unknown, ERHIAccess::SRVGraphics));
 #endif
 
-	Encoder.SubmitFrame(EncoderTex, Now);
+	EncoderFrame->ReadyFence->Clear();
+	RHICmdList.WriteGPUFence(EncoderFrame->ReadyFence);
+
+	EncoderFrame->CaptureTimeSeconds = Now;
+
+	Encoder.SubmitFrame(EncoderFrame);
 }
 
 FTextureRHIRef FSentryBackBufferCapture::AcquireCachedTexture_RenderThread(FCachedTexture& Cache, uint32 Width, uint32 Height, EPixelFormat Format,
@@ -275,47 +288,57 @@ FTextureRHIRef FSentryBackBufferCapture::AcquireCachedTexture_RenderThread(FCach
 	return Cache.Texture;
 }
 
-FTextureRHIRef FSentryBackBufferCapture::AcquireTexturePoolSlot_RenderThread(FCachedTexturePool& Pool, uint32 Width, uint32 Height, EPixelFormat Format,
+TSharedPtr<FSentryVideoFrame, ESPMode::ThreadSafe> FSentryBackBufferCapture::AcquireFrame_RenderThread(uint32 Width, uint32 Height, EPixelFormat Format,
 	ETextureCreateFlags Flags, ERHIAccess InitialState, const TCHAR* DebugName)
 {
-	if (Width != Pool.Width || Height != Pool.Height || Format != Pool.Format || Flags != Pool.Flags)
+	for (TSharedPtr<FSentryVideoFrame, ESPMode::ThreadSafe>& Slot : EncoderPool)
 	{
-		for (FTextureRHIRef& Slot : Pool.Slots)
+		if (!Slot.IsValid())
 		{
-			Slot.SafeRelease();
+			Slot = MakeShared<FSentryVideoFrame, ESPMode::ThreadSafe>();
 		}
-		Pool.Width = Width;
-		Pool.Height = Height;
-		Pool.Format = Format;
-		Pool.Flags = Flags;
-	}
 
-	FTextureRHIRef* FreeSlot = nullptr;
-	for (FTextureRHIRef& Slot : Pool.Slots)
-	{
-		if (Slot.GetRefCount() <= 1)
+		if (!Slot->TryAcquire())
 		{
-			FreeSlot = &Slot;
-			break;
+			continue;
 		}
+
+		FSentryVideoFrame& Frame = *Slot;
+
+		if (Frame.Width != Width || Frame.Height != Height || Frame.Format != Format || Frame.Flags != Flags)
+		{
+			Frame.Texture.SafeRelease();
+			Frame.Width = Width;
+			Frame.Height = Height;
+			Frame.Format = Format;
+			Frame.Flags = Flags;
+		}
+
+		if (!Frame.Texture.IsValid())
+		{
+			const FRHITextureCreateDesc Desc = FRHITextureCreateDesc::Create2D(DebugName)
+												   .SetExtent(static_cast<int32>(Width), static_cast<int32>(Height))
+												   .SetFormat(Format)
+												   .SetFlags(Flags)
+												   .SetInitialState(InitialState);
+			Frame.Texture = FRHICommandListImmediate::Get().CreateTexture(Desc);
+		}
+
+		if (!Frame.ReadyFence.IsValid())
+		{
+			Frame.ReadyFence = RHICreateGPUFence(TEXT("SentrySessionReplayFrameFence"));
+		}
+
+		if (!Frame.Texture.IsValid() || !Frame.ReadyFence.IsValid())
+		{
+			Frame.Release();
+			continue;
+		}
+
+		return Slot;
 	}
 
-	if (!FreeSlot)
-	{
-		return nullptr;
-	}
-
-	if (!FreeSlot->IsValid())
-	{
-		const FRHITextureCreateDesc Desc = FRHITextureCreateDesc::Create2D(DebugName)
-											   .SetExtent(static_cast<int32>(Width), static_cast<int32>(Height))
-											   .SetFormat(Format)
-											   .SetFlags(Flags)
-											   .SetInitialState(InitialState);
-		*FreeSlot = FRHICommandListImmediate::Get().CreateTexture(Desc);
-	}
-
-	return *FreeSlot;
+	return nullptr;
 }
 
 #endif // USE_SENTRY_SESSION_REPLAY

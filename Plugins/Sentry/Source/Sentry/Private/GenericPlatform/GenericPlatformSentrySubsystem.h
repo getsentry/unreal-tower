@@ -94,6 +94,10 @@ protected:
 	virtual void ConfigureScreenshotCapturing(sentry_options_t* Options) {}
 	virtual void ConfigureSessionReplayCapturing(sentry_options_t* Options) {}
 
+	virtual void ConfigureAppHangTracking();
+	virtual void ResetAppHangTracking();
+	virtual bool IsAppHangTrackingActive() const { return true; }
+
 	void ConfigureCrashReporterAppearance(const USentrySettings* Settings);
 
 	FString GetHandlerPath() const;
@@ -170,11 +174,15 @@ private:
 	FThreadSafeBool bIsCrashing;
 
 #ifdef USE_SENTRY_SESSION_REPLAY
+	void StartSessionReplay(const USentrySettings* settings);
+
 	FString GetReplayPath() const;
 
 	FString SessionReplayId;
 
 	TUniquePtr<FSentrySessionReplayRecorder> SessionReplay;
+
+	FDelegateHandle EngineLoopInitCompleteHandle;
 #endif
 };
 
