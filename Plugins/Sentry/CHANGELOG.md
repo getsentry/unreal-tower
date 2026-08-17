@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.20.0
+
+> [!IMPORTANT]
+> Structured logging and metrics are now always enabled, having been on by default since `1.11.0`. The corresponding `EnableStructuredLogging` and `EnableMetrics` settings are deprecated and no longer have any effect.
+>
+> We recognize that this change may inconvenience applications that relied on the opt-out. Use a `BeforeLogHandler` or `BeforeMetricHandler` to filter logs or metrics before they are sent. We made this tradeoff deliberately because consistent behavior across SDK integrations will help most users successfully adopt these features.
+
+### Behavioral Changes
+
+- Structured logging and metrics are now always enabled ([#1538](https://github.com/getsentry/sentry-unreal/pull/1538))
+
+### Features
+
+- Add `beforeSendFeedback` callback for user feedback filtering ([#1528](https://github.com/getsentry/sentry-unreal/pull/1528))
+
+### Fixes
+
+- Map `SENTRY_LEVEL_TRACE` in the native log-level converters so trace-level logs no longer emit a spurious "Unknown sentry level" warning ([#1534](https://github.com/getsentry/sentry-unreal/pull/1534))
+- Release discarded value in native before* callbacks ([#1536](https://github.com/getsentry/sentry-unreal/pull/1536))
+- Fix Android structured log levels being mapped to the wrong severity ([#1537](https://github.com/getsentry/sentry-unreal/pull/1537))
+
+### Dependencies
+
+- Bump Cocoa SDK from v9.25.0 to v9.26.0 ([#1532](https://github.com/getsentry/sentry-unreal/pull/1532))
+  - [changelog](https://github.com/getsentry/sentry-cocoa/blob/main/CHANGELOG.md#9260)
+  - [diff](https://github.com/getsentry/sentry-cocoa/compare/9.25.0...9.26.0)
+- Bump Java SDK from v8.52.0 to v8.53.0 ([#1533](https://github.com/getsentry/sentry-unreal/pull/1533))
+  - [changelog](https://github.com/getsentry/sentry-java/blob/main/CHANGELOG.md#8530)
+  - [diff](https://github.com/getsentry/sentry-java/compare/8.52.0...8.53.0)
+- Bump Native SDK from v0.16.2 to v0.16.3 ([#1535](https://github.com/getsentry/sentry-unreal/pull/1535))
+  - [changelog](https://github.com/getsentry/sentry-native/blob/master/CHANGELOG.md#0163)
+  - [diff](https://github.com/getsentry/sentry-native/compare/0.16.2...0.16.3)
+
 ## 1.19.0
 
 > [!IMPORTANT]

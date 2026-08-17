@@ -50,6 +50,7 @@ FAndroidSentrySubsystem::~FAndroidSentrySubsystem()
 void FAndroidSentrySubsystem::InitWithSettings(const USentrySettings* settings, const FSentryCallbackHandlers& callbackHandlers)
 {
 	USentryBeforeSendHandler* beforeSendHandler = callbackHandlers.BeforeSendHandler;
+	USentryBeforeSendFeedbackHandler* beforeSendFeedbackHandler = callbackHandlers.BeforeSendFeedbackHandler;
 	USentryBeforeBreadcrumbHandler* beforeBreadcrumbHandler = callbackHandlers.BeforeBreadcrumbHandler;
 	USentryBeforeLogHandler* beforeLogHandler = callbackHandlers.BeforeLogHandler;
 	USentryBeforeMetricHandler* beforeMetricHandler = callbackHandlers.BeforeMetricHandler;
@@ -83,8 +84,8 @@ void FAndroidSentrySubsystem::InitWithSettings(const USentrySettings* settings, 
 	SettingsJson->SetBoolField(TEXT("enableTombstone"),
 		settings->AndroidCrashBackend == ESentryAndroidCrashBackend::TombstoneOnly || settings->AndroidCrashBackend == ESentryAndroidCrashBackend::TombstoneMergedWithNdk);
 	SettingsJson->SetBoolField(TEXT("enableAutoLogAttachment"), settings->EnableAutoLogAttachment);
-	SettingsJson->SetBoolField(TEXT("enableStructuredLogging"), settings->EnableStructuredLogging);
-	SettingsJson->SetBoolField(TEXT("enableMetrics"), settings->EnableMetrics);
+	SettingsJson->SetBoolField(TEXT("enableStructuredLogging"), true);
+	SettingsJson->SetBoolField(TEXT("enableMetrics"), true);
 	SettingsJson->SetStringField(TEXT("deviceType"), GetDeviceType());
 	if (settings->EnableOfflineCaching)
 	{
@@ -105,6 +106,10 @@ void FAndroidSentrySubsystem::InitWithSettings(const USentrySettings* settings, 
 	if (beforeSendHandler != nullptr)
 	{
 		SettingsJson->SetNumberField(TEXT("beforeSendHandler"), (jlong)beforeSendHandler);
+	}
+	if (beforeSendFeedbackHandler != nullptr)
+	{
+		SettingsJson->SetNumberField(TEXT("beforeSendFeedbackHandler"), (jlong)beforeSendFeedbackHandler);
 	}
 	if (beforeLogHandler != nullptr)
 	{

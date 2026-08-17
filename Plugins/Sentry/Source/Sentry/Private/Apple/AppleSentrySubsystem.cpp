@@ -56,6 +56,11 @@ void FAppleSentrySubsystem::InitWithSettings(const USentrySettings* settings, co
 	USentryBeforeMetricHandler* beforeMetricHandler = callbackHandlers.BeforeMetricHandler;
 	USentryTraceSampler* traceSampler = callbackHandlers.TraceSampler;
 
+	if (callbackHandlers.BeforeSendFeedbackHandler != nullptr)
+	{
+		UE_LOG(LogSentrySdk, Warning, TEXT("beforeSendFeedback handler is set but isn't supported on Mac/iOS - it will be ignored."));
+	}
+
 	isScreenshotAttachmentEnabled = settings->AttachScreenshot;
 	isGameLogAttachmentEnabled = settings->EnableAutoLogAttachment;
 	isSessionReplayAttachmentEnabled = settings->AttachSessionReplay;
@@ -92,8 +97,8 @@ void FAppleSentrySubsystem::InitWithSettings(const USentrySettings* settings, co
 			options.maxBreadcrumbs = settings->MaxBreadcrumbs;
 			options.sendDefaultPii = settings->SendDefaultPii;
 			options.maxAttachmentSize = settings->MaxAttachmentSize;
-			options.enableLogs = settings->EnableStructuredLogging;
-			options.enableMetrics = settings->EnableMetrics;
+			options.enableLogs = YES;
+			options.enableMetrics = YES;
 #if SENTRY_OBJC_UIKIT_AVAILABLE
 			options.attachScreenshot = settings->AttachScreenshot;
 #endif
