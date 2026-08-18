@@ -1,0 +1,86 @@
+name: Build Demo (macOS)
+
+on:
+  workflow_call:
+
+env:
+  REGISTRY: ghcr.io
+  UE_VERSION: 5.8
+
+jobs:
+  build:
+    name: Build macOS
+    runs-on: macos-latest
+    timeout-minutes: 360
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          path: checkout
+          submodules: recursive
+
+      - name: Install oras
+        uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2.0.1
+
+      - name: Download Unreal Engine
+        # The pre-built macOS engine is published as split zip parts in the OCI
+        # registry (see getsentry/sentry-unreal ue-oci-macos.yml).
+        env:
+          GH_USERNAME: ${{ secrets.GH_USERNAME }}
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          echo "$PAT_TOKEN" | oras login "$REGISTRY" -u "$GH_USERNAME" --password-stdin
+          # Retry the pull - the runner's network occasionally drops connections mid-download
+          for attempt in 1 2 3; do
+            oras pull "$REGISTRY/getsentry/unreal-docker:$UE_VERSION-mac" && break
+            [ "$attempt" = 3 ] && exit 1
+            rm -f ue.zip.part-*
+            sleep 10
+          done
+          cat ue.zip.part-* > ue.zip
+          rm ue.zip.part-*
+
+      - name: Install Unreal Engine
+        run: |
+          mkdir -p "$HOME/UnrealEngine"
+          unzip -q ue.zip -d "$HOME/UnrealEngine"
+          rm ue.zip
+          UE_ROOT="$HOME/UnrealEngine"
+          echo "UE_ROOT=$UE_ROOT" >> "$GITHUB_ENV"
+          # Zip archives may not preserve execute permissions
+          chmod -R u+x "$UE_ROOT/Engine/Build/BatchFiles" "$UE_ROOT/Engine/Binaries" || true
+
+      - name: Build game
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        run: |
+          "$UE_ROOT/Engine/Build/BatchFiles/RunUAT.sh" BuildCookRun \
+            -project="$GITHUB_WORKSPACE/checkout/SentryTower.uproject" \
+            -archivedirectory="$GITHUB_WORKSPACE/checkout/Builds" \
+            -platform=Mac \
+            -UBTArgs="-AllCores" \
+            -nop4 \
+            -cook \
+            -build \
+            -stage \
+            -package \
+            -archive \
+            -pak \
+            -iostore \
+            -nozenstore
+
+      - name: Collect build logs on failure
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        with:
+          name: SentryTower-Mac-build-logs
+          path: checkout/Saved/Logs
+
+      - name: Upload SentryTower
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        with:
+          name: SentryTower-Mac
+          path: checkout/Builds/Mac/
+          retention-days: 90

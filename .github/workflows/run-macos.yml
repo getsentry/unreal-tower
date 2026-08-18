@@ -1,0 +1,66 @@
+name: Run Demo (macOS)
+
+on:
+  workflow_call:
+
+jobs:
+  run:
+    name: Run Demo (macOS)
+    runs-on: macos-latest
+
+    steps:
+      - name: Get latest build run
+        id: get-run
+        shell: pwsh
+        run: |
+          $runs = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/actions/workflows/ci.yml/runs?status=success&per_page=1" -Headers @{Authorization="Bearer ${{ secrets.GITHUB_TOKEN }}"}
+          $runId = $runs.workflow_runs[0].id
+          echo "run-id=$runId" >> $env:GITHUB_OUTPUT
+
+      - name: Download SentryTower
+        id: download
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: SentryTower-Mac
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.get-run.outputs.run-id }}
+
+      - name: Run Simulation
+        env:
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+        run: |
+          DL="${{ steps.download.outputs.download-path }}"
+          echo "Download path: $DL"
+          ls "$DL"
+
+          # The artifact zip round-trip strips the unix execute bit
+          chmod -R +x "$DL"
+
+          APP_BIN="$(find "$DL" -type f -path '*/SentryTower.app/Contents/MacOS/SentryTower' | head -n 1)"
+          if [ -z "$APP_BIN" ]; then
+            echo "::error::SentryTower.app was not found in: $DL"
+            exit 1
+          fi
+          echo "App binary: $APP_BIN"
+
+          # Start a dummy spectator client in the background to emulate multiplayer setup required for network traffic generation
+          echo "Starting spectator client..."
+          "$APP_BIN" -Unattended -nullrhi 127.0.0.1:7777 &
+          CLIENT_PID=$!
+
+          # Run game as a listen server to which the spectator client can connect
+          echo "Running: SentryTower -Unattended -nullrhi --idle"
+          set +e
+          "$APP_BIN" -Unattended -nullrhi --idle "/Game/Maps/Main?listen" -port=7777
+          EXIT_CODE=$?
+          set -e
+          echo "Process completed. Exit code: $EXIT_CODE"
+
+          kill $CLIENT_PID 2>/dev/null || true
+
+          if [ $EXIT_CODE -eq 0 ]; then
+            echo "::error::Expected non-zero exit code but got 0"
+            exit 1
+          fi
+          echo "Simulation completed with expected non-zero exit code: $EXIT_CODE"

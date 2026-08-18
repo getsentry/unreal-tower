@@ -13,6 +13,7 @@ on:
           - all
           - windows
           - linux
+          - macos
           - android
 
 concurrency:
@@ -28,6 +29,11 @@ jobs:
   run-linux:
     if: ${{ github.event_name != 'workflow_dispatch' || contains(fromJSON('["all","linux"]'), inputs.platforms) }}
     uses: ./.github/workflows/run-linux.yml
+    secrets: inherit
+
+  run-macos:
+    if: ${{ github.event_name != 'workflow_dispatch' || contains(fromJSON('["all","macos"]'), inputs.platforms) }}
+    uses: ./.github/workflows/run-macos.yml
     secrets: inherit
 
   run-android:
