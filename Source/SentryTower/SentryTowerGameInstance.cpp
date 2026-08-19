@@ -31,12 +31,25 @@ void USentryTowerGameInstance::Init()
 
 			if (ElapsedTime >= 5.0f)
 			{
-				UE_LOG(LogTemp, Log, TEXT("SentryTowerGameInstance: Triggering GPU crash (HeavyComputeLoop)"));
+				UE_LOG(LogTemp, Warning, TEXT("SentryTowerGameInstance: Triggering GPU crash (HeavyComputeLoop)"));
+
+				if (USentrySubsystem* Sentry = GEngine->GetEngineSubsystem<USentrySubsystem>())
+				{
+					Sentry->SetTag(TEXT("test.gpu_crash"), TEXT("xsx"));
+					Sentry->CaptureMessage(TEXT("GPU crash test: dispatching HeavyComputeLoop"));
+				}
 
 				FHeavyComputeLoopDispatchParams Params(1, 1, 1);
 				Params.Input[0] = 111;
 				Params.Input[1] = 222;
-				FHeavyComputeLoopInterface::Dispatch(Params, [](int) {});
+				FHeavyComputeLoopInterface::Dispatch(Params, [](int OutputVal)
+				{
+					// Only reached if the GPU did NOT hang (shader ran to completion)
+					if (USentrySubsystem* Sentry = GEngine->GetEngineSubsystem<USentrySubsystem>())
+					{
+						Sentry->CaptureMessage(TEXT("GPU crash test: HeavyComputeLoop COMPLETED without hang"));
+					}
+				});
 
 				return false;
 			}
