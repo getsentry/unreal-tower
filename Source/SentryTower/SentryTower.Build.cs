@@ -10,7 +10,8 @@ public class SentryTower : ModuleRules
 	
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "AIModule", "EnhancedInput", "UMG", "Sentry", "HTTP", "Json", "JsonUtilities" });
 
-		if (Target.Platform == UnrealTargetPlatform.Win64)
+		string PlatformName = Target.Platform.ToString();
+		if (PlatformName == "Win64" || PlatformName == "XSX" || PlatformName == "XB1")
 		{
 			PrivateDependencyModuleNames.AddRange(new string[] { "SentryShaders" });
 		}
