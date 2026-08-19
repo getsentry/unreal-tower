@@ -61,6 +61,7 @@ jobs:
             -archivedirectory="$GITHUB_WORKSPACE/checkout/Builds" \
             -platform=Mac \
             -UBTArgs="-AllCores" \
+            -AdditionalCookerOptions="-skipminspeccheck" \
             -nop4 \
             -cook \
             -build \
