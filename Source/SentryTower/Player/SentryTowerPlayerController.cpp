@@ -8,7 +8,7 @@
 #include "SentryTowerPawn.h"
 #include "SentryTowerTurret.h"
 
-#if PLATFORM_WINDOWS
+#if PLATFORM_WINDOWS || PLATFORM_XSX || PLATFORM_XB1
 #include "SentryShaders/HeavyComputeLoop/HeavyComputeLoop.h"
 #endif
 
@@ -57,7 +57,7 @@ void ASentryTowerPlayerController::OnTriggerGpuCrashStarted()
 {
 	UE_LOG(LogTemp, Log, TEXT("ASentryTowerPlayerController: Trigger GPU crash!"));
 
-#if PLATFORM_WINDOWS
+#if PLATFORM_WINDOWS || PLATFORM_XSX || PLATFORM_XB1
 
 	FHeavyComputeLoopDispatchParams Params(1, 1, 1);
 	Params.Input[0] = 111;

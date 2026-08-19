@@ -12,9 +12,41 @@
 #include "SentryTransactionContext.h"
 #include "Interfaces/IHttpResponse.h"
 
+#if PLATFORM_WINDOWS || PLATFORM_XSX || PLATFORM_XB1
+#include "SentryShaders/HeavyComputeLoop/HeavyComputeLoop.h"
+#endif
+
 void USentryTowerGameInstance::Init()
 {
 	Super::Init();
+
+#if PLATFORM_WINDOWS || PLATFORM_XSX || PLATFORM_XB1
+	if (FParse::Param(FCommandLine::Get(), TEXT("crash-gpu")))
+	{
+		// Deferred so the RHI and global shader map are ready before dispatching the GPU hang
+		FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([](float DeltaTime) -> bool
+		{
+			static float ElapsedTime = 0.0f;
+			ElapsedTime += DeltaTime;
+
+			if (ElapsedTime >= 5.0f)
+			{
+				UE_LOG(LogTemp, Log, TEXT("SentryTowerGameInstance: Triggering GPU crash (HeavyComputeLoop)"));
+
+				FHeavyComputeLoopDispatchParams Params(1, 1, 1);
+				Params.Input[0] = 111;
+				Params.Input[1] = 222;
+				FHeavyComputeLoopInterface::Dispatch(Params, [](int) {});
+
+				return false;
+			}
+
+			return true;
+		}));
+
+		return;
+	}
+#endif
 
 	if (FParse::Param(FCommandLine::Get(), TEXT("upload-only")))
 	{
