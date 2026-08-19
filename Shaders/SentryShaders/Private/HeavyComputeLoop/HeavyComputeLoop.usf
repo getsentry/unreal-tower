@@ -8,10 +8,16 @@ void HeavyComputeLoop(uint3 DispatchThreadId : SV_DispatchThreadID, uint GroupIn
 {
 	float x = 0;
 
-	for (int i = 0; i < 10000000000; ++i)
+	// Input[0] is 111 at runtime, so this loop never terminates. Because the bound comes
+	// from an external buffer the shader compiler cannot resolve, it can't unroll, bound,
+	// or eliminate the loop -- producing a real GPU hang on all D3D12 platforms. The
+	// previous int32-overflow bound (10000000000) completed instead of hanging on Scarlett.
+	[loop]
+	while (Input[0] != 0)
 	{
-		x += sin(i) * sin(Input[0]) * sin(Input[1]);
+		x += sin(x) * sin(Input[0]) * sin(Input[1]);
+		Output[0] = (int)x;
 	}
 
-	Output[0] = x;
+	Output[0] = (int)x;
 }
