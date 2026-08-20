@@ -23,16 +23,21 @@ void USentryTowerGameInstance::Init()
 #if PLATFORM_WINDOWS || PLATFORM_XSX || PLATFORM_XB1
 	if (FParse::Param(FCommandLine::Get(), TEXT("crash-gpu")))
 	{
-		// Deferred so the RHI and global shader map are ready before dispatching the GPU hang
+		// Deferred so the RHI and global shader map are ready before triggering a GPU crash.
+		// Two staged attempts so the run's wall-clock attributes the crash: HeavyComputeLoop
+		// first, then (if the title is still alive) the engine's GPUDebugCrash command.
 		FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([](float DeltaTime) -> bool
 		{
 			static float ElapsedTime = 0.0f;
+			static bool bDispatchedShader = false;
+			static bool bDispatchedEngineCrash = false;
 			ElapsedTime += DeltaTime;
 
-			if (ElapsedTime >= 5.0f)
+			if (!bDispatchedShader && ElapsedTime >= 5.0f)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("SentryTowerGameInstance: Triggering GPU crash (HeavyComputeLoop)"));
+				bDispatchedShader = true;
 
+				UE_LOG(LogTemp, Warning, TEXT("[gpu-crash] Stage 1: dispatching HeavyComputeLoop"));
 				if (USentrySubsystem* Sentry = GEngine->GetEngineSubsystem<USentrySubsystem>())
 				{
 					Sentry->SetTag(TEXT("test.gpu_crash"), TEXT("xsx"));
@@ -45,12 +50,33 @@ void USentryTowerGameInstance::Init()
 				FHeavyComputeLoopInterface::Dispatch(Params, [](int OutputVal)
 				{
 					// Only reached if the GPU did NOT hang (shader ran to completion)
+					UE_LOG(LogTemp, Warning, TEXT("[gpu-crash] HeavyComputeLoop COMPLETED without hang (output=%d)"), OutputVal);
 					if (USentrySubsystem* Sentry = GEngine->GetEngineSubsystem<USentrySubsystem>())
 					{
 						Sentry->CaptureMessage(TEXT("GPU crash test: HeavyComputeLoop COMPLETED without hang"));
 					}
 				});
 
+				UE_LOG(LogTemp, Warning, TEXT("[gpu-crash] Stage 1: HeavyComputeLoop dispatch call returned"));
+				return true;
+			}
+
+			if (bDispatchedShader && !bDispatchedEngineCrash && ElapsedTime >= 15.0f)
+			{
+				bDispatchedEngineCrash = true;
+
+				UE_LOG(LogTemp, Warning, TEXT("[gpu-crash] Stage 2: still alive; issuing engine 'GPUDebugCrash hang'"));
+				if (USentrySubsystem* Sentry = GEngine->GetEngineSubsystem<USentrySubsystem>())
+				{
+					Sentry->CaptureMessage(TEXT("GPU crash test: issuing engine GPUDebugCrash hang"));
+				}
+
+				if (GEngine)
+				{
+					GEngine->Exec(nullptr, TEXT("GPUDebugCrash hang"));
+				}
+
+				UE_LOG(LogTemp, Warning, TEXT("[gpu-crash] Stage 2: GPUDebugCrash exec returned"));
 				return false;
 			}
 
