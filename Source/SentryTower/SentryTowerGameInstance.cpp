@@ -38,11 +38,6 @@ void USentryTowerGameInstance::Init()
 				bDispatchedShader = true;
 
 				UE_LOG(LogTemp, Warning, TEXT("[gpu-crash] Stage 1: dispatching HeavyComputeLoop"));
-				if (USentrySubsystem* Sentry = GEngine->GetEngineSubsystem<USentrySubsystem>())
-				{
-					Sentry->SetTag(TEXT("test.gpu_crash"), TEXT("xsx"));
-					Sentry->CaptureMessage(TEXT("GPU crash test: dispatching HeavyComputeLoop"));
-				}
 
 				FHeavyComputeLoopDispatchParams Params(1, 1, 1);
 				Params.Input[0] = 111;
@@ -51,10 +46,6 @@ void USentryTowerGameInstance::Init()
 				{
 					// Only reached if the GPU did NOT hang (shader ran to completion)
 					UE_LOG(LogTemp, Warning, TEXT("[gpu-crash] HeavyComputeLoop COMPLETED without hang (output=%d)"), OutputVal);
-					if (USentrySubsystem* Sentry = GEngine->GetEngineSubsystem<USentrySubsystem>())
-					{
-						Sentry->CaptureMessage(TEXT("GPU crash test: HeavyComputeLoop COMPLETED without hang"));
-					}
 				});
 
 				UE_LOG(LogTemp, Warning, TEXT("[gpu-crash] Stage 1: HeavyComputeLoop dispatch call returned"));
@@ -66,10 +57,6 @@ void USentryTowerGameInstance::Init()
 				bDispatchedEngineCrash = true;
 
 				UE_LOG(LogTemp, Warning, TEXT("[gpu-crash] Stage 2: still alive; issuing engine 'GPUDebugCrash hang'"));
-				if (USentrySubsystem* Sentry = GEngine->GetEngineSubsystem<USentrySubsystem>())
-				{
-					Sentry->CaptureMessage(TEXT("GPU crash test: issuing engine GPUDebugCrash hang"));
-				}
 
 				if (GEngine)
 				{
