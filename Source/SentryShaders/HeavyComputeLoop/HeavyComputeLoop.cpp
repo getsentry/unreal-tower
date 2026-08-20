@@ -94,53 +94,11 @@ private:
 IMPLEMENT_GLOBAL_SHADER(FHeavyComputeLoop, "/SentryShaders/HeavyComputeLoop/HeavyComputeLoop.usf", "HeavyComputeLoop", SF_Compute);
 
 void FHeavyComputeLoopInterface::DispatchRenderThread(FRHICommandListImmediate& RHICmdList, FHeavyComputeLoopDispatchParams Params, TFunction<void(int OutputVal)> AsyncCallback) {
-	FRDGBuilder GraphBuilder(RHICmdList);
+	SCOPE_CYCLE_COUNTER(STAT_HeavyComputeLoop_Execute);
 
-	{
-		SCOPE_CYCLE_COUNTER(STAT_HeavyComputeLoop_Execute);
-		DECLARE_GPU_STAT(HeavyComputeLoop);
-		RDG_EVENT_SCOPE(GraphBuilder, "HeavyComputeLoop");
-
-		typename FHeavyComputeLoop::FPermutationDomain PermutationVector;
-
-		// Add any static permutation options here
-		// PermutationVector.Set<FHeavyComputeLoop::FMyPermutationName>(12345);
-
-		TShaderMapRef<FHeavyComputeLoop> ComputeShader(GetGlobalShaderMap(GMaxRHIFeatureLevel), PermutationVector);
-
-		bool bIsShaderValid = ComputeShader.IsValid();
-
-		if (bIsShaderValid) {
-			FHeavyComputeLoop::FParameters* PassParameters = GraphBuilder.AllocParameters<FHeavyComputeLoop::FParameters>();
-
-			// Texture backed by an invalid GPU address; any UAV access page-faults the GPU
-			// and removes the device. Dispatched on the direct (graphics) queue so the crash
-			// surfaces as device-removed rather than an async-compute hang.
-			ETextureCreateFlags TexFlags = TexCreate_UAV | TexCreate_ShaderResource | TexCreate_NoFastClear | TexCreate_RenderTargetable | TexCreate_Invalid;
-			FRDGTextureDesc CreateInfo = FRDGTextureDesc::Create2D(
-				FIntPoint(64, 64),
-				PF_R32_UINT,
-				FClearValueBinding::None,
-				TexFlags);
-
-			FRDGTextureRef PageFaultTexture = GraphBuilder.CreateTexture(CreateInfo, TEXT("HeavyComputeLoop.PageFaultUAV"));
-			PassParameters->PageFaultUAV = GraphBuilder.CreateUAV(PageFaultTexture);
-
-			FComputeShaderUtils::AddPass(
-				GraphBuilder,
-				RDG_EVENT_NAME("ExecuteHeavyComputeLoop"),
-				ERDGPassFlags::Compute | ERDGPassFlags::NeverCull,
-				ComputeShader,
-				PassParameters,
-				FIntVector(1, 1, 1));
-		} else {
-			#if WITH_EDITOR
-				GEngine->AddOnScreenDebugMessage((uint64)42145125184, 6.f, FColor::Red, FString(TEXT("The compute shader has a problem.")));
-			#endif
-
-			// We exit here as we don't want to crash the game if the shader is not found or has an error.
-		}
-	}
-
-	GraphBuilder.Execute();
+	// Corrupt the graphics command list to force a GPU crash. On Xbox this simulates a
+	// reallocated/reused command buffer (device-hung), which may surface as device-removed
+	// rather than a GPU timeout. NOTE: the Xbox RHIGpuHangCommandListCorruption implementation
+	// is gated by WITH_GPUDEBUGCRASH, so this only has an effect in Development/Test builds.
+	RHICmdList.GpuHangCommandListCorruption();
 }
