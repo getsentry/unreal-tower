@@ -50,7 +50,8 @@ public:
 
 		// SHADER_PARAMETER_STRUCT_REF(FMyCustomStruct, MyCustomStruct)
 
-		SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture2D<uint>, PageFaultUAV)
+		SHADER_PARAMETER_RDG_BUFFER_SRV(Buffer<int>, Input)
+		SHADER_PARAMETER_RDG_BUFFER_UAV(RWBuffer<int>, Output)
 
 	END_SHADER_PARAMETER_STRUCT()
 
@@ -94,11 +95,38 @@ private:
 IMPLEMENT_GLOBAL_SHADER(FHeavyComputeLoop, "/SentryShaders/HeavyComputeLoop/HeavyComputeLoop.usf", "HeavyComputeLoop", SF_Compute);
 
 void FHeavyComputeLoopInterface::DispatchRenderThread(FRHICommandListImmediate& RHICmdList, FHeavyComputeLoopDispatchParams Params, TFunction<void(int OutputVal)> AsyncCallback) {
-	SCOPE_CYCLE_COUNTER(STAT_HeavyComputeLoop_Execute);
+	FRDGBuilder GraphBuilder(RHICmdList);
 
-	// Corrupt the graphics command list to force a GPU crash. On Xbox this simulates a
-	// reallocated/reused command buffer (device-hung), which may surface as device-removed
-	// rather than a GPU timeout. NOTE: the Xbox RHIGpuHangCommandListCorruption implementation
-	// is gated by WITH_GPUDEBUGCRASH, so this only has an effect in Development/Test builds.
-	RHICmdList.GpuHangCommandListCorruption();
+	{
+		SCOPE_CYCLE_COUNTER(STAT_HeavyComputeLoop_Execute);
+
+		FHeavyComputeLoop::FPermutationDomain PermutationVector;
+		TShaderMapRef<FHeavyComputeLoop> ComputeShader(GetGlobalShaderMap(GMaxRHIFeatureLevel), PermutationVector);
+		if (ComputeShader.IsValid())
+		{
+			FHeavyComputeLoop::FParameters* PassParameters = GraphBuilder.AllocParameters<FHeavyComputeLoop::FParameters>();
+
+			// Input[0] is non-zero, so the shader loops forever and hangs the GPU. It lives in a buffer
+			// so the compiler can't prove the loop terminates and eliminate it.
+			const int32 NumInputs = 2;
+			FRDGBufferRef InputBuffer = CreateUploadBuffer(GraphBuilder, TEXT("HeavyComputeLoop.Input"),
+				sizeof(int32), NumInputs, Params.Input, sizeof(int32) * NumInputs);
+			PassParameters->Input = GraphBuilder.CreateSRV(FRDGBufferSRVDesc(InputBuffer, PF_R32_SINT));
+
+			FRDGBufferRef OutputBuffer = GraphBuilder.CreateBuffer(
+				FRDGBufferDesc::CreateBufferDesc(sizeof(int32), 1), TEXT("HeavyComputeLoop.Output"));
+			PassParameters->Output = GraphBuilder.CreateUAV(FRDGBufferUAVDesc(OutputBuffer, PF_R32_SINT));
+
+			// Dispatch on the graphics (direct) queue so the hang stalls the rendering pipeline.
+			FComputeShaderUtils::AddPass(
+				GraphBuilder,
+				RDG_EVENT_NAME("ExecuteHeavyComputeLoop"),
+				ERDGPassFlags::Compute | ERDGPassFlags::NeverCull,
+				ComputeShader,
+				PassParameters,
+				FIntVector(1, 1, 1));
+		}
+	}
+
+	GraphBuilder.Execute();
 }

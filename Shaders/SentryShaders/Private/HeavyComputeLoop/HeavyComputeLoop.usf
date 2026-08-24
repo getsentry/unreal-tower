@@ -1,19 +1,22 @@
 #include "/Engine/Public/Platform.ush"
 
-RWTexture2D<uint> PageFaultUAV;
+Buffer<int> Input;
+RWBuffer<int> Output;
 
 [numthreads(1, 1, 1)]
 void HeavyComputeLoop(uint3 DispatchThreadId : SV_DispatchThreadID, uint GroupIndex : SV_GroupIndex)
 {
-	// PageFaultUAV is backed by an invalid GPU address (created with TexCreate_Invalid),
-	// so any access page-faults the GPU and removes the device. This mirrors the engine's
-	// GPUDebugCrash "pagefault" mode and produces a device-removed crash rather than a hang.
-	uint what = PageFaultUAV[uint2(0, 0)] + 1;
+	float x = 0;
 
-	uint OldValue = 0;
-	InterlockedAdd(PageFaultUAV[uint2(0, 0)], 1, OldValue);
-	if (OldValue == 0)
+	// Input[0] is 111 at runtime, so this loop never terminates. Because the bound comes from an
+	// external buffer the shader compiler cannot resolve, it can't unroll, bound, or eliminate the
+	// loop -- producing a real GPU hang (timeout) on all D3D12 platforms including Xbox.
+	[loop]
+	while (Input[0] != 0)
 	{
-		PageFaultUAV[uint2(0, 1)] = what;
+		x += sin(x) * sin(Input[0]) * sin(Input[1]);
+		Output[0] = (int)x;
 	}
+
+	Output[0] = (int)x;
 }
