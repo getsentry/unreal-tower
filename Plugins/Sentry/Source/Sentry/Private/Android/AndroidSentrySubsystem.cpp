@@ -434,10 +434,22 @@ void FAndroidSentrySubsystem::SetContext(const FString& key, const TMap<FString,
 		*FSentryJavaObjectWrapper::GetJString(key), FAndroidSentryConverters::VariantMapToNative(values)->GetJObject());
 }
 
+void FAndroidSentrySubsystem::UpdateContext(const FString& key, const TMap<FString, FSentryVariant>& values)
+{
+	FSentryJavaObjectWrapper::CallStaticMethod<void>(SentryJavaClasses::SentryBridgeJava, "updateContext", "(Ljava/lang/String;Ljava/util/HashMap;)V",
+		*FSentryJavaObjectWrapper::GetJString(key), FAndroidSentryConverters::VariantMapToNative(values)->GetJObject());
+}
+
 void FAndroidSentrySubsystem::SetTag(const FString& key, const FString& value)
 {
 	FSentryJavaObjectWrapper::CallStaticMethod<void>(SentryJavaClasses::SentryBridgeJava, "setTag", "(Ljava/lang/String;Ljava/lang/String;)V",
 		*FSentryJavaObjectWrapper::GetJString(key), *FSentryJavaObjectWrapper::GetJString(value));
+}
+
+void FAndroidSentrySubsystem::SetTags(const TMap<FString, FString>& tags)
+{
+	FSentryJavaObjectWrapper::CallStaticMethod<void>(SentryJavaClasses::SentryBridgeJava, "setTags", "(Ljava/util/HashMap;)V",
+		FAndroidSentryConverters::StringMapToNative(tags)->GetJObject());
 }
 
 void FAndroidSentrySubsystem::RemoveTag(const FString& key)

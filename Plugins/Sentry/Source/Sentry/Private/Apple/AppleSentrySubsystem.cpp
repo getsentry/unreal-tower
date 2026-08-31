@@ -592,10 +592,33 @@ void FAppleSentrySubsystem::SetContext(const FString& key, const TMap<FString, F
 	}];
 }
 
+void FAppleSentrySubsystem::UpdateContext(const FString& key, const TMap<FString, FSentryVariant>& values)
+{
+	[SENTRY_APPLE_CLASS(SentryObjCSDK) configureScope:^(SentryObjCScope* scope) {
+		NSDictionary* contexts = [scope serialize][@"context"];
+		NSDictionary* existing = [contexts objectForKey:key.GetNSString()];
+
+		NSMutableDictionary* merged = existing ? [existing mutableCopy] : [NSMutableDictionary dictionary];
+		[merged addEntriesFromDictionary:FAppleSentryConverters::VariantMapToNative(values)];
+
+		[scope setContextValue:merged forKey:key.GetNSString()];
+	}];
+}
+
 void FAppleSentrySubsystem::SetTag(const FString& key, const FString& value)
 {
 	[SENTRY_APPLE_CLASS(SentryObjCSDK) configureScope:^(SentryObjCScope* scope) {
 		[scope setTagValue:value.GetNSString() forKey:key.GetNSString()];
+	}];
+}
+
+void FAppleSentrySubsystem::SetTags(const TMap<FString, FString>& tags)
+{
+	[SENTRY_APPLE_CLASS(SentryObjCSDK) configureScope:^(SentryObjCScope* scope) {
+		for (const auto& tag : tags)
+		{
+			[scope setTagValue:tag.Value.GetNSString() forKey:tag.Key.GetNSString()];
+		}
 	}];
 }
 

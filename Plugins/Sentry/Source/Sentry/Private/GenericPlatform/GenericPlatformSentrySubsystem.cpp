@@ -664,8 +664,6 @@ void FGenericPlatformSentrySubsystem::InitWithSettings(const USentrySettings* se
 	sentry_options_set_shutdown_timeout(options, settings->ShutdownTimeout);
 	sentry_options_set_crashpad_wait_for_upload(options, settings->CrashpadWaitForUpload);
 	sentry_options_set_logger_enabled_when_crashed(options, settings->EnableOnCrashLogging);
-	sentry_options_set_enable_logs(options, true);
-	sentry_options_set_enable_metrics(options, true);
 	sentry_options_set_before_send_metric(options, HandleBeforeMetric, this);
 	sentry_options_set_http_retry(options, 1);
 	sentry_options_set_enable_large_attachments(options, settings->EnableLargeAttachments);
@@ -674,6 +672,7 @@ void FGenericPlatformSentrySubsystem::InitWithSettings(const USentrySettings* se
 	{
 		sentry_options_set_minidump_mode(options, FGenericPlatformSentryConverters::MinidumpModeToNative(settings->MinidumpMode));
 		sentry_options_set_crash_reporting_mode(options, FGenericPlatformSentryConverters::CrashReportingModeToNative(settings->CrashReportingMode));
+		sentry_options_set_crash_upload_mode(options, FGenericPlatformSentryConverters::CrashUploadModeToNative(settings->CrashUploadMode));
 	}
 
 	if (beforeBreadcrumb)
@@ -1088,6 +1087,16 @@ void FGenericPlatformSentrySubsystem::SetContext(const FString& key, const TMap<
 	}
 }
 
+void FGenericPlatformSentrySubsystem::UpdateContext(const FString& key, const TMap<FString, FSentryVariant>& values)
+{
+	sentry_update_context(TCHAR_TO_UTF8(*key), FGenericPlatformSentryConverters::VariantMapToNative(values));
+
+	if (crashReporter)
+	{
+		crashReporter->UpdateContext(key, values);
+	}
+}
+
 void FGenericPlatformSentrySubsystem::SetTag(const FString& key, const FString& value)
 {
 	sentry_set_tag(TCHAR_TO_UTF8(*key), TCHAR_TO_UTF8(*value));
@@ -1095,6 +1104,16 @@ void FGenericPlatformSentrySubsystem::SetTag(const FString& key, const FString& 
 	if (crashReporter)
 	{
 		crashReporter->SetTag(key, value);
+	}
+}
+
+void FGenericPlatformSentrySubsystem::SetTags(const TMap<FString, FString>& tags)
+{
+	sentry_set_tags(FGenericPlatformSentryConverters::StringMapToNative(tags));
+
+	if (crashReporter)
+	{
+		crashReporter->SetTags(tags);
 	}
 }
 

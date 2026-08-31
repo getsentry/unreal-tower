@@ -212,12 +212,43 @@ public class SentryBridgeJava {
 			}
 		});
 	}
+	public static void updateContext(final String key, final HashMap<String, Object> values) {
+		Sentry.configureScope(new ScopeCallback() {
+			@Override
+			public void run(@NonNull IScope scope) {
+				Object existing = scope.getContexts().get(key);
+				if (existing instanceof Map<?, ?>) {
+					Map<String, Object> merged = new HashMap<>();
+					for (Map.Entry<?, ?> entry : ((Map<?, ?>) existing).entrySet()) {
+						if (entry.getKey() instanceof String) {
+							merged.put((String) entry.getKey(), entry.getValue());
+						}
+					}
+					merged.putAll(values);
+					scope.setContexts(key, merged);
+				} else {
+					scope.setContexts(key, values);
+				}
+			}
+		});
+	}
 
 	public static void setTag(final String key, final String value) {
 		Sentry.configureScope(new ScopeCallback() {
 			@Override
 			public void run(@NonNull IScope scope) {
 				scope.setTag(key, value);
+			}
+		});
+	}
+
+	public static void setTags(final HashMap<String, String> tags) {
+		Sentry.configureScope(new ScopeCallback() {
+			@Override
+			public void run(@NonNull IScope scope) {
+				for (Map.Entry<String, String> tag : tags.entrySet()) {
+					scope.setTag(tag.getKey(), tag.getValue());
+				}
 			}
 		});
 	}

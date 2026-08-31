@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.21.0
+
+### Features
+
+- Add crash upload mode setting for the native backend ([#1547](https://github.com/getsentry/sentry-unreal/pull/1547))
+- Add `SetTags` to Sentry subsystem for updating multiple tags in one go ([#1550](https://github.com/getsentry/sentry-unreal/pull/1550))
+
+### Fixes
+
+- Stop overwriting native-collected device context on consoles ([#1542](https://github.com/getsentry/sentry-unreal/pull/1542))
+- Fix crashes going unreported after first-time DSN setup until editor restart ([#1545](https://github.com/getsentry/sentry-unreal/pull/1545))
+
+### Dependencies
+
+- Bump Android Gradle Plugin from v6.18.0 to v6.19.0 ([#1539](https://github.com/getsentry/sentry-unreal/pull/1539))
+  - [changelog](https://github.com/getsentry/sentry-android-gradle-plugin/blob/main/CHANGELOG.md#6190)
+  - [diff](https://github.com/getsentry/sentry-android-gradle-plugin/compare/6.18.0...6.19.0)
+- Bump Native SDK from v0.16.3 to v0.16.4 ([#1544](https://github.com/getsentry/sentry-unreal/pull/1544))
+  - [changelog](https://github.com/getsentry/sentry-native/blob/master/CHANGELOG.md#0164)
+  - [diff](https://github.com/getsentry/sentry-native/compare/0.16.3...0.16.4)
+- Bump Java SDK from v8.53.0 to v8.54.0 ([#1551](https://github.com/getsentry/sentry-unreal/pull/1551))
+  - [changelog](https://github.com/getsentry/sentry-java/blob/main/CHANGELOG.md#8540)
+  - [diff](https://github.com/getsentry/sentry-java/compare/8.53.0...8.54.0)
+
 ## 1.20.0
 
 > [!IMPORTANT]
