@@ -46,7 +46,7 @@ void ASentryTowerProjectile::OnBeginOverlap(UPrimitiveComponent* OverlappedCompo
 	auto TowerPawn = Cast<ASentryTowerPawn>(UGameplayStatics::GetPlayerPawn(this, 0));
 	if (!TowerPawn)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("ASentryTowerProjectile: Can't get tower pawn!"));
+		UE_LOG(LogTemp, Verbose, TEXT("ASentryTowerProjectile: Can't get tower pawn!"));
 		return;
 	}
 
