@@ -101,7 +101,7 @@ extern "C" {
 #    endif
 #endif
 #ifndef SENTRY_SDK_VERSION
-#    define SENTRY_SDK_VERSION "0.16.5"
+#    define SENTRY_SDK_VERSION "0.16.6"
 #endif
 #define SENTRY_SDK_USER_AGENT SENTRY_SDK_NAME "/" SENTRY_SDK_VERSION
 
@@ -673,6 +673,12 @@ SENTRY_EXPERIMENTAL_API sentry_value_t sentry_value_new_stacktrace(
  */
 SENTRY_EXPERIMENTAL_API void sentry_value_set_stacktrace(
     sentry_value_t value, void **ips, size_t len);
+
+/**
+ * Sets the level of an Event value.
+ */
+SENTRY_EXPERIMENTAL_API void sentry_event_set_level(
+    sentry_value_t event, sentry_level_t level);
 
 /**
  * Adds an Exception to an Event value.
@@ -2377,6 +2383,16 @@ SENTRY_API void sentry_options_set_backend(
 SENTRY_API int sentry_init(sentry_options_t *options);
 
 /**
+ * Returns whether the Sentry SDK has been initialized successfully and has not
+ * yet been closed.
+ *
+ * Returns 1 after `sentry_init()` completes successfully and until
+ * `sentry_close()` completes. Returns 0 before initialization, after failed
+ * initialization, and after close.
+ */
+SENTRY_API int sentry_is_enabled(void);
+
+/**
  * Instructs the transport to flush its send-queue.
  *
  * The `timeout` parameter is in milliseconds.
@@ -2843,6 +2859,8 @@ SENTRY_API void sentry_scope_remove_fingerprint(sentry_scope_t *scope);
  *
  * Once a trace is managed by the downstream SDK using this function,
  * transactions no longer act as automatic trace boundaries.
+ *
+ * Pass a NULL or empty `parent_span_id` to start a trace without a parent.
  */
 SENTRY_API void sentry_set_trace(
     const char *trace_id, const char *parent_span_id);
@@ -2876,7 +2894,12 @@ SENTRY_API void sentry_scope_set_transaction_n(
     sentry_scope_t *scope, const char *transaction, size_t transaction_len);
 
 /**
- * Sets the event level.
+ * Sets the default event level on the scope.
+ *
+ * The default level applies to events created with `sentry_value_new_event`,
+ * which do not have an explicit level.
+ *
+ * Note: Native crash events are always assigned `SENTRY_LEVEL_FATAL`.
  */
 SENTRY_API void sentry_set_level(sentry_level_t level);
 SENTRY_API void sentry_scope_set_level(
