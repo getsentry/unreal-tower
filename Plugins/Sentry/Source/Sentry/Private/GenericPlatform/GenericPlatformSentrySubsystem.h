@@ -17,6 +17,7 @@ class FGenericPlatformSentryAttachment;
 class FGenericPlatformSentryScope;
 class FGenericPlatformSentryCrashReporter;
 class USentryEvent;
+class USentryHint;
 class USentryBeforeSendFeedbackHandler;
 
 #if USE_SENTRY_NATIVE
@@ -48,6 +49,7 @@ public:
 	virtual TSharedPtr<ISentryId> CaptureEnsure(const FString& type, const FString& message) override;
 	virtual TSharedPtr<ISentryId> CaptureHang(uint32 HungThreadId) override;
 	virtual void CaptureFeedback(TSharedPtr<ISentryFeedback> feedback) override;
+	virtual void CaptureFeedbackWithScope(TSharedPtr<ISentryFeedback> feedback, const FSentryScopeDelegate& onConfigureScope) override;
 	virtual void SetUser(TSharedPtr<ISentryUser> user) override;
 	virtual void RemoveUser() override;
 	virtual void SetContext(const FString& key, const TMap<FString, FSentryVariant>& values) override;
@@ -84,8 +86,10 @@ public:
 	USentryBeforeMetricHandler* GetBeforeMetricHandler() const;
 	USentryTraceSampler* GetTraceSampler() const;
 
-	void TryCaptureScreenshot();
-	void TryCaptureGpuDump();
+	FString TryCaptureScreenshot() const;
+	FString TryCaptureGpuDump() const;
+
+	TArray<FString> GetSessionGpuShaderDebugInfoPaths() const;
 
 protected:
 	virtual void ConfigureHandlerPath(sentry_options_t* Options) {}
@@ -112,12 +116,12 @@ protected:
 	virtual FString GetHandlerExecutableName() const { return TEXT("invalid"); }
 	virtual FString GetCrashReporterExecutableName() const { return TEXT("invalid"); }
 
-	virtual sentry_value_t OnBeforeSend(sentry_value_t event, void* hint, void* closure, bool isCrash);
+	virtual sentry_value_t OnBeforeSend(sentry_value_t event, sentry_hint_t* hint, void* closure, bool isCrash);
 	virtual sentry_value_t OnBeforeSendFeedback(sentry_value_t event, sentry_hint_t* hint, void* closure);
 	virtual sentry_value_t OnBeforeBreadcrumb(sentry_value_t breadcrumb, void* closure);
 	virtual sentry_value_t OnBeforeLog(sentry_value_t log, void* closure);
 	virtual sentry_value_t OnBeforeMetric(sentry_value_t metric, void* closure);
-	virtual sentry_value_t OnCrash(const sentry_ucontext_t* uctx, sentry_value_t event, void* closure);
+	virtual sentry_value_t OnCrash(const sentry_ucontext_t* uctx, sentry_value_t event, sentry_hint_t* hint, void* closure);
 	virtual double OnTraceSampling(const sentry_transaction_context_t* transaction_ctx, sentry_value_t custom_sampling_ctx, const int* parent_sampled);
 
 	virtual bool IsScreenshotSupported() const;
@@ -143,12 +147,12 @@ private:
 	/**
 	 * Static wrappers that are passed to the Sentry library.
 	 */
-	static sentry_value_t HandleBeforeSend(sentry_value_t event, void* hint, void* closure);
+	static sentry_value_t HandleBeforeSend(sentry_value_t event, sentry_hint_t* hint, void* closure);
 	static sentry_value_t HandleBeforeSendFeedback(sentry_value_t event, sentry_hint_t* hint, void* closure);
 	static sentry_value_t HandleBeforeBreadcrumb(sentry_value_t breadcrumb, void* closure);
 	static sentry_value_t HandleBeforeLog(sentry_value_t log, void* closure);
 	static sentry_value_t HandleBeforeMetric(sentry_value_t metric, void* closure);
-	static sentry_value_t HandleOnCrash(const sentry_ucontext_t* uctx, sentry_value_t event, void* closure);
+	static sentry_value_t HandleOnCrash(const sentry_ucontext_t* uctx, sentry_value_t event, sentry_hint_t* hint, void* closure);
 	static double HandleTraceSampling(const sentry_transaction_context_t* transaction_ctx, sentry_value_t custom_sampling_ctx, const int* parent_sampled, void* closure);
 
 	USentryBeforeSendHandler* beforeSend;
@@ -177,6 +181,7 @@ private:
 	FString databaseParentPath;
 
 	TStrongObjectPtr<USentryEvent> PooledCrashEvent;
+	TStrongObjectPtr<USentryHint> PooledCrashHint;
 
 	FThreadSafeBool bIsCrashing;
 

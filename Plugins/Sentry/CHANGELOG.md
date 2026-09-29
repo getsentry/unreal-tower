@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.24.0
+
+### Features
+
+- Add editor AI toolset and agent skills for Unreal MCP integration ([#1584](https://github.com/getsentry/sentry-unreal/pull/1584))
+- Add hint support for macOS/iOS ([#1578](https://github.com/getsentry/sentry-unreal/pull/1578))
+- Add hint support for Windows/Linux and other `sentry-native` platforms ([#1600](https://github.com/getsentry/sentry-unreal/pull/1600))
+- Add API for capturing user feedback with a local scope ([#1585](https://github.com/getsentry/sentry-unreal/pull/1585))
+- Allow platform extensions to supply their own session replay video encoder ([#1596](https://github.com/getsentry/sentry-unreal/pull/1596))
+- Add API for removing attachments from event hint by filename pattern or clearing them all ([#1604](https://github.com/getsentry/sentry-unreal/pull/1604))
+
+### Fixes
+
+- Reduce overhead when reading event and scope data on native platforms ([#1576](https://github.com/getsentry/sentry-unreal/pull/1576))
+- Replace the plugin's shell-based post-build steps with Python to comply with FAB publishing requirements ([#1580](https://github.com/getsentry/sentry-unreal/pull/1580))
+- Fix duplicate automatic breadcrumbs after re-initializing the SDK ([#1590](https://github.com/getsentry/sentry-unreal/pull/1590))
+- Respect per-platform config file overrides when uploading debug symbols automatically ([#1589](https://github.com/getsentry/sentry-unreal/pull/1589))
+
+### Dependencies
+
+- Bump Java SDK from v8.55.0 to v8.58.0 ([#1575](https://github.com/getsentry/sentry-unreal/pull/1575), [#1588](https://github.com/getsentry/sentry-unreal/pull/1588), [#1598](https://github.com/getsentry/sentry-unreal/pull/1598))
+  - [changelog](https://github.com/getsentry/sentry-java/blob/main/CHANGELOG.md#8580)
+  - [diff](https://github.com/getsentry/sentry-java/compare/8.55.0...8.58.0)
+- Bump Cocoa SDK from v9.27.0 to v9.29.2 ([#1574](https://github.com/getsentry/sentry-unreal/pull/1574), [#1591](https://github.com/getsentry/sentry-unreal/pull/1591), [#1601](https://github.com/getsentry/sentry-unreal/pull/1601), [#1603](https://github.com/getsentry/sentry-unreal/pull/1603))
+  - [changelog](https://github.com/getsentry/sentry-cocoa/blob/main/CHANGELOG.md#9292)
+  - [diff](https://github.com/getsentry/sentry-cocoa/compare/9.27.0...9.29.2)
+- Bump Android Gradle Plugin from v6.21.0 to v6.23.0 ([#1579](https://github.com/getsentry/sentry-unreal/pull/1579), [#1605](https://github.com/getsentry/sentry-unreal/pull/1605))
+  - [changelog](https://github.com/getsentry/sentry-android-gradle-plugin/blob/main/CHANGELOG.md#6230)
+  - [diff](https://github.com/getsentry/sentry-android-gradle-plugin/compare/6.21.0...6.23.0)
+- Bump CLI from v3.7.0 to v3.8.0 ([#1587](https://github.com/getsentry/sentry-unreal/pull/1587))
+  - [changelog](https://github.com/getsentry/sentry-cli/blob/master/CHANGELOG.md#380)
+  - [diff](https://github.com/getsentry/sentry-cli/compare/3.7.0...3.8.0)
+- Bump Native SDK from v0.16.6-12-ga92fd4a to v0.17.1 ([#1597](https://github.com/getsentry/sentry-unreal/pull/1597), [#1599](https://github.com/getsentry/sentry-unreal/pull/1599))
+  - [changelog](https://github.com/getsentry/sentry-native/blob/master/CHANGELOG.md#0171)
+  - [diff](https://github.com/getsentry/sentry-native/compare/0.16.6-12-ga92fd4a...0.17.1)
+
 ## 1.23.0
 
 ### Features

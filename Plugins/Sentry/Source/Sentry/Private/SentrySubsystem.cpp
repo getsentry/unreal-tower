@@ -66,8 +66,6 @@ void USentrySubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 void USentrySubsystem::Deinitialize()
 {
-	DisableAutomaticBreadcrumbs();
-
 	Close();
 
 	Super::Deinitialize();
@@ -199,6 +197,8 @@ void USentrySubsystem::InitializeWithSettings(const FConfigureSettingsNativeDele
 
 void USentrySubsystem::Close()
 {
+	DisableAutomaticBreadcrumbs();
+
 	if (GLog && OutputDevice)
 	{
 		GLog->RemoveOutputDevice(OutputDevice.Get());
@@ -576,6 +576,35 @@ void USentrySubsystem::CaptureFeedback(USentryFeedback* Feedback)
 	}
 
 	SubsystemNativeImpl->CaptureFeedback(Feedback->GetNativeObject());
+}
+
+void USentrySubsystem::CaptureFeedbackWithScope(USentryFeedback* Feedback, const FConfigureScopeDelegate& OnConfigureScope)
+{
+	CaptureFeedbackWithScope(Feedback, FConfigureScopeNativeDelegate::CreateUFunction(const_cast<UObject*>(OnConfigureScope.GetUObject()), OnConfigureScope.GetFunctionName()));
+}
+
+void USentrySubsystem::CaptureFeedbackWithScope(USentryFeedback* Feedback, const FConfigureScopeNativeDelegate& OnConfigureScope)
+{
+	check(SubsystemNativeImpl);
+	check(Feedback);
+
+	if (!SubsystemNativeImpl || !SubsystemNativeImpl->IsEnabled())
+	{
+		return;
+	}
+
+	if (!Feedback)
+	{
+		return;
+	}
+
+	const auto ConfigureScopeLambda = FSentryScopeDelegate::CreateLambda([OnConfigureScope](TSharedPtr<ISentryScope> NativeScope)
+	{
+		USentryScope* UnrealScope = USentryScope::Create(NativeScope);
+		OnConfigureScope.ExecuteIfBound(UnrealScope);
+	});
+
+	SubsystemNativeImpl->CaptureFeedbackWithScope(Feedback->GetNativeObject(), ConfigureScopeLambda);
 }
 
 void USentrySubsystem::CaptureFeedbackWithParams(const FString& Message, const FString& Name, const FString& Email, const FString& EventId)
@@ -1112,26 +1141,31 @@ void USentrySubsystem::DisableAutomaticBreadcrumbs()
 	if (PreLoadMapDelegate.IsValid())
 	{
 		FCoreUObjectDelegates::PreLoadMap.Remove(PreLoadMapDelegate);
+		PreLoadMapDelegate.Reset();
 	}
 
 	if (PostLoadMapDelegate.IsValid())
 	{
 		FCoreUObjectDelegates::PostLoadMapWithWorld.Remove(PostLoadMapDelegate);
+		PostLoadMapDelegate.Reset();
 	}
 
 	if (GameStateChangedDelegate.IsValid())
 	{
 		FCoreDelegates::GameStateClassChanged.Remove(GameStateChangedDelegate);
+		GameStateChangedDelegate.Reset();
 	}
 
 	if (UserActivityChangedDelegate.IsValid())
 	{
 		FCoreDelegates::UserActivityStringChanged.Remove(UserActivityChangedDelegate);
+		UserActivityChangedDelegate.Reset();
 	}
 
 	if (GameSessionIDChangedDelegate.IsValid())
 	{
 		FCoreDelegates::GameSessionIDChanged.Remove(GameSessionIDChangedDelegate);
+		GameSessionIDChangedDelegate.Reset();
 	}
 }
 

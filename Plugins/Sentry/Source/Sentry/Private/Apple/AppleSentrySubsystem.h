@@ -10,6 +10,7 @@
 #include "SessionReplay/SentrySessionReplayRecorder.h"
 #endif
 
+@class SentryObjCHint;
 @class SentryObjCScope;
 
 class FAppleSentrySubsystem : public ISentrySubsystem
@@ -39,6 +40,7 @@ public:
 	virtual bool IsHangTrackingSupported() const override;
 	virtual bool IsNativeHangTrackingEnabled() const override;
 	virtual void CaptureFeedback(TSharedPtr<ISentryFeedback> feedback) override;
+	virtual void CaptureFeedbackWithScope(TSharedPtr<ISentryFeedback> feedback, const FSentryScopeDelegate& onConfigureScope) override;
 	virtual void SetUser(TSharedPtr<ISentryUser> user) override;
 	virtual void RemoveUser() override;
 	virtual void SetContext(const FString& key, const TMap<FString, FSentryVariant>& values) override;
@@ -68,10 +70,7 @@ public:
 	virtual FString TryCaptureScreenshot() const { return FString(); };
 
 protected:
-	void UploadAttachmentForEvent(TSharedPtr<ISentryId> eventId, const FString& filePath, const FString& name, bool deleteAfterUpload = false) const;
-
-	void UploadScreenshotForEvent(TSharedPtr<ISentryId> eventId, const FString& screenshotPath) const;
-	void UploadGameLogForEvent(TSharedPtr<ISentryId> eventId, const FString& logFilePath) const;
+	void AddCrashAttachmentsToHint(SentryObjCHint* hint) const;
 
 	void AddGameLogAttachmentToScope(SentryObjCScope* scope) const;
 	void AddScreenshotAttachmentToScope(SentryObjCScope* scope) const;
@@ -86,8 +85,6 @@ protected:
 	bool isScreenshotAttachmentEnabled = false;
 	bool isGameLogAttachmentEnabled = false;
 	bool isSessionReplayAttachmentEnabled = false;
-
-	int32 maxAttachmentSize = 0;
 
 private:
 #ifdef USE_SENTRY_SESSION_REPLAY

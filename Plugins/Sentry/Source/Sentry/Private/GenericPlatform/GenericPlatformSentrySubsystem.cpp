@@ -22,6 +22,7 @@
 #include "SentryBreadcrumb.h"
 #include "SentryDefines.h"
 #include "SentryEvent.h"
+#include "SentryHint.h"
 #include "SentryLog.h"
 #include "SentryMetric.h"
 #include "SentryModule.h"
@@ -34,6 +35,9 @@
 #include "Utils/SentryCallbackUtils.h"
 #include "Utils/SentryFileUtils.h"
 #include "Utils/SentryScreenshotUtils.h"
+
+#include "HAL/PlatformSentryHint.h"
+#include "HAL/PlatformSentryScope.h"
 
 #include "Infrastructure/GenericPlatformSentryConverters.h"
 
@@ -81,7 +85,7 @@ static void PrintVerboseLog(sentry_level_t level, const char* message, va_list a
 	}
 }
 
-/* static */ sentry_value_t FGenericPlatformSentrySubsystem::HandleBeforeSend(sentry_value_t event, void* hint, void* closure)
+/* static */ sentry_value_t FGenericPlatformSentrySubsystem::HandleBeforeSend(sentry_value_t event, sentry_hint_t* hint, void* closure)
 {
 	if (closure)
 	{
@@ -117,7 +121,7 @@ static void PrintVerboseLog(sentry_level_t level, const char* message, va_list a
 	}
 }
 
-/* static */ sentry_value_t FGenericPlatformSentrySubsystem::HandleOnCrash(const sentry_ucontext_t* uctx, sentry_value_t event, void* closure)
+/* static */ sentry_value_t FGenericPlatformSentrySubsystem::HandleOnCrash(const sentry_ucontext_t* uctx, sentry_value_t event, sentry_hint_t* hint, void* closure)
 {
 	if (closure)
 	{
@@ -127,7 +131,7 @@ static void PrintVerboseLog(sentry_level_t level, const char* message, va_list a
 		// benefit from short-circuiting user callbacks.
 		platformSubsystem->bIsCrashing = true;
 
-		return platformSubsystem->OnCrash(uctx, event, closure);
+		return platformSubsystem->OnCrash(uctx, event, hint, closure);
 	}
 	else
 	{
@@ -167,7 +171,7 @@ static void PrintVerboseLog(sentry_level_t level, const char* message, va_list a
 	return metric;
 }
 
-sentry_value_t FGenericPlatformSentrySubsystem::OnBeforeSend(sentry_value_t event, void* hint, void* closure, bool isCrash)
+sentry_value_t FGenericPlatformSentrySubsystem::OnBeforeSend(sentry_value_t event, sentry_hint_t* hint, void* closure, bool isCrash)
 {
 	if (!closure || this != closure)
 	{
@@ -193,17 +197,23 @@ sentry_value_t FGenericPlatformSentrySubsystem::OnBeforeSend(sentry_value_t even
 	}
 
 	USentryEvent* EventToProcess;
-	if (isCrash && PooledCrashEvent.IsValid())
+	USentryHint* HintToProcess;
+
+	if (isCrash && PooledCrashEvent.IsValid() && PooledCrashHint.IsValid())
 	{
 		PooledCrashEvent->SetNativeImpl(MakeShareable(new FGenericPlatformSentryEvent(event, true)));
 		EventToProcess = PooledCrashEvent.Get();
+
+		PooledCrashHint->SetNativeImpl(MakeShareable(new FPlatformSentryHint(hint)));
+		HintToProcess = PooledCrashHint.Get();
 	}
 	else
 	{
 		EventToProcess = USentryEvent::Create(MakeShareable(new FGenericPlatformSentryEvent(event, isCrash)));
+		HintToProcess = USentryHint::Create(MakeShareable(new FPlatformSentryHint(hint)));
 	}
 
-	USentryEvent* ProcessedEvent = Handler->HandleBeforeSend(EventToProcess, nullptr);
+	USentryEvent* ProcessedEvent = Handler->HandleBeforeSend(EventToProcess, HintToProcess);
 
 	if (!ProcessedEvent)
 	{
@@ -240,8 +250,9 @@ sentry_value_t FGenericPlatformSentrySubsystem::OnBeforeSendFeedback(sentry_valu
 	}
 
 	USentryEvent* EventToProcess = USentryEvent::Create(MakeShareable(new FGenericPlatformSentryEvent(event, false)));
+	USentryHint* HintToProcess = USentryHint::Create(MakeShareable(new FPlatformSentryHint(hint)));
 
-	USentryEvent* ProcessedEvent = Handler->HandleBeforeSendFeedback(EventToProcess, nullptr);
+	USentryEvent* ProcessedEvent = Handler->HandleBeforeSendFeedback(EventToProcess, HintToProcess);
 
 	if (!ProcessedEvent)
 	{
@@ -383,13 +394,19 @@ sentry_value_t FGenericPlatformSentrySubsystem::OnBeforeMetric(sentry_value_t me
 	return metric;
 }
 
-sentry_value_t FGenericPlatformSentrySubsystem::OnCrash(const sentry_ucontext_t* uctx, sentry_value_t event, void* closure)
+sentry_value_t FGenericPlatformSentrySubsystem::OnCrash(const sentry_ucontext_t* uctx, sentry_value_t event, sentry_hint_t* hint, void* closure)
 {
+	FPlatformSentryHint CrashHint(hint);
+
 	if (isScreenshotAttachmentEnabled && !IsOutOfProcessScreenshotEnabled() && !IsRunningCommandlet())
 	{
 		if (IsScreenshotSupported())
 		{
-			TryCaptureScreenshot();
+			const FString& ScreenshotPath = TryCaptureScreenshot();
+			if (!ScreenshotPath.IsEmpty())
+			{
+				CrashHint.AddAttachment(MakeShareable(new FGenericPlatformSentryAttachment(ScreenshotPath, TEXT("screenshot.png"), TEXT("image/png"))));
+			}
 		}
 		else
 		{
@@ -399,14 +416,23 @@ sentry_value_t FGenericPlatformSentrySubsystem::OnCrash(const sentry_ucontext_t*
 
 	if (GIsGPUCrashed && isGpuDumpAttachmentEnabled)
 	{
-		TryCaptureGpuDump();
+		const FString& GpuDumpPath = TryCaptureGpuDump();
+		if (!GpuDumpPath.IsEmpty())
+		{
+			CrashHint.AddAttachment(MakeShareable(new FGenericPlatformSentryAttachment(GpuDumpPath, FPaths::GetCleanFilename(GpuDumpPath), TEXT("application/octet-stream"))));
+
+			for (const FString& ShaderDebugInfoPath : GetSessionGpuShaderDebugInfoPaths())
+			{
+				CrashHint.AddAttachment(MakeShareable(new FGenericPlatformSentryAttachment(ShaderDebugInfoPath, FPaths::GetCleanFilename(ShaderDebugInfoPath), TEXT("application/octet-stream"))));
+			}
+		}
 	}
 
 	SetEventCrashType(event, ResolveCrashType());
 
 	// At this point crash events are handled the same way as non-fatal ones,
 	// so we defer to `OnBeforeSend` to invoke the custom `beforeSend` handler (if configured)
-	return OnBeforeSend(event, nullptr, closure, true);
+	return OnBeforeSend(event, hint, closure, true);
 }
 
 double FGenericPlatformSentrySubsystem::OnTraceSampling(const sentry_transaction_context_t* transaction_ctx, sentry_value_t custom_sampling_ctx, const int* parent_sampled)
@@ -488,8 +514,8 @@ void FGenericPlatformSentrySubsystem::AddFileAttachment(TSharedPtr<ISentryAttach
 {
 	TSharedPtr<FGenericPlatformSentryAttachment> platformAttachment = StaticCastSharedPtr<FGenericPlatformSentryAttachment>(attachment);
 
-	sentry_attachment_t* nativeAttachment =
-		sentry_attach_file(TCHAR_TO_UTF8(*platformAttachment->GetPath()));
+	sentry_value_t nativeAttachment =
+		sentry_attachment_from_file(TCHAR_TO_UTF8(*platformAttachment->GetPath()));
 
 	if (!platformAttachment->GetFilename().IsEmpty())
 		sentry_attachment_set_filename(nativeAttachment, TCHAR_TO_UTF8(*platformAttachment->GetFilename()));
@@ -497,7 +523,7 @@ void FGenericPlatformSentrySubsystem::AddFileAttachment(TSharedPtr<ISentryAttach
 	if (!platformAttachment->GetContentType().IsEmpty())
 		sentry_attachment_set_content_type(nativeAttachment, TCHAR_TO_UTF8(*platformAttachment->GetContentType()));
 
-	platformAttachment->SetNativeObject(nativeAttachment);
+	platformAttachment->SetUuid(sentry_add_attachment(nativeAttachment));
 
 	attachments.Add(platformAttachment);
 }
@@ -508,13 +534,13 @@ void FGenericPlatformSentrySubsystem::AddByteAttachment(TSharedPtr<ISentryAttach
 
 	const TArray<uint8>& byteBuf = platformAttachment->GetDataByRef();
 
-	sentry_attachment_t* nativeAttachment =
-		sentry_attach_bytes(reinterpret_cast<const char*>(byteBuf.GetData()), byteBuf.Num(), TCHAR_TO_UTF8(*platformAttachment->GetFilename()));
+	sentry_value_t nativeAttachment =
+		sentry_attachment_from_bytes(reinterpret_cast<const char*>(byteBuf.GetData()), byteBuf.Num(), TCHAR_TO_UTF8(*platformAttachment->GetFilename()));
 
 	if (!platformAttachment->GetContentType().IsEmpty())
 		sentry_attachment_set_content_type(nativeAttachment, TCHAR_TO_UTF8(*platformAttachment->GetContentType()));
 
-	platformAttachment->SetNativeObject(nativeAttachment);
+	platformAttachment->SetUuid(sentry_add_attachment(nativeAttachment));
 
 	attachments.Add(platformAttachment);
 }
@@ -699,9 +725,6 @@ void FGenericPlatformSentrySubsystem::InitWithSettings(const USentrySettings* se
 	UE_LOG(LogSentrySdk, Log, TEXT("Sentry initialization completed with result %d (0 on success)."), initResult);
 
 	isEnabled = initResult == 0 ? true : false;
-
-	sentry_clear_crashed_last_run();
-
 	isStackTraceEnabled = settings->AttachStacktrace;
 	isPiiAttachmentEnabled = settings->SendDefaultPii;
 
@@ -724,10 +747,11 @@ void FGenericPlatformSentrySubsystem::InitWithSettings(const USentrySettings* se
 		}
 	}
 
-	// Pre-allocate a USentryEvent to be reused on the crash path. This avoids `NewObject` (and the
+	// Pre-allocate a USentryEvent and USentryHint to be reused on the crash path. This avoids `NewObject` (and the
 	// associated GC lock acquisition) inside the `before_send` callback when handling fatal errors,
 	// which can re-trigger memory-related crashes (e.g. stack overflow).
 	PooledCrashEvent = TStrongObjectPtr<USentryEvent>(NewObject<USentryEvent>());
+	PooledCrashHint = TStrongObjectPtr<USentryHint>(NewObject<USentryHint>());
 
 #ifdef USE_SENTRY_SESSION_REPLAY
 	if (isEnabled && settings->AttachSessionReplay)
@@ -773,6 +797,7 @@ void FGenericPlatformSentrySubsystem::Close()
 #endif
 
 	PooledCrashEvent.Reset();
+	PooledCrashHint.Reset();
 
 	sentry_close();
 }
@@ -871,14 +896,14 @@ void FGenericPlatformSentrySubsystem::RemoveAttachment(TSharedPtr<ISentryAttachm
 {
 	TSharedPtr<FGenericPlatformSentryAttachment> platformAttachment = StaticCastSharedPtr<FGenericPlatformSentryAttachment>(attachment);
 
-	sentry_attachment_t* nativeAttachment = platformAttachment->GetNativeObject();
+	sentry_uuid_t uuid = platformAttachment->GetUuid();
 
-	if (!nativeAttachment)
+	if (sentry_uuid_is_nil(&uuid))
 		return;
 
-	sentry_remove_attachment(nativeAttachment);
+	sentry_remove_attachment(uuid);
 
-	platformAttachment->SetNativeObject(nullptr);
+	platformAttachment->SetUuid(sentry_uuid_nil());
 }
 
 void FGenericPlatformSentrySubsystem::ClearAttachments()
@@ -919,7 +944,7 @@ TSharedPtr<ISentryId> FGenericPlatformSentrySubsystem::CaptureMessageWithScope(c
 	onConfigureScope.ExecuteIfBound(NewLocalScope);
 	NewLocalScope->Apply(scope);
 
-	sentry_uuid_t id = sentry_scope_capture_event(scope, nativeEvent);
+	sentry_uuid_t id = sentry_scope_capture_event(scope, nativeEvent, nullptr);
 
 	return MakeShareable(new FGenericPlatformSentryId(id));
 }
@@ -956,7 +981,7 @@ TSharedPtr<ISentryId> FGenericPlatformSentrySubsystem::CaptureEventWithScope(TSh
 	onScopeConfigure.ExecuteIfBound(NewLocalScope);
 	NewLocalScope->Apply(scope);
 
-	sentry_uuid_t id = sentry_scope_capture_event(scope, nativeEvent);
+	sentry_uuid_t id = sentry_scope_capture_event(scope, nativeEvent, nullptr);
 
 	return MakeShareable(new FGenericPlatformSentryId(id));
 }
@@ -991,12 +1016,13 @@ TSharedPtr<ISentryId> FGenericPlatformSentrySubsystem::CaptureEnsure(const FStri
 
 	sentry_scope_t* scope = sentry_local_scope_new();
 
-	sentry_attachment_t* screenshotAttachment =
-		sentry_scope_attach_file(scope, TCHAR_TO_UTF8(*ScreenshotPath));
+	sentry_value_t screenshotAttachment =
+		sentry_attachment_from_file(TCHAR_TO_UTF8(*ScreenshotPath));
 	sentry_attachment_set_filename(screenshotAttachment, "screenshot.png");
 	sentry_attachment_set_content_type(screenshotAttachment, "image/png");
+	sentry_scope_add_attachment(scope, screenshotAttachment);
 
-	sentry_uuid_t id = sentry_scope_capture_event(scope, exceptionEvent);
+	sentry_uuid_t id = sentry_scope_capture_event(scope, exceptionEvent, nullptr);
 
 	IFileManager::Get().Delete(*ScreenshotPath);
 
@@ -1044,9 +1070,25 @@ TSharedPtr<ISentryId> FGenericPlatformSentrySubsystem::CaptureHang(uint32 HungTh
 
 void FGenericPlatformSentrySubsystem::CaptureFeedback(TSharedPtr<ISentryFeedback> feedback)
 {
+	CaptureFeedbackWithScope(feedback, FSentryScopeDelegate());
+}
+
+void FGenericPlatformSentrySubsystem::CaptureFeedbackWithScope(TSharedPtr<ISentryFeedback> feedback, const FSentryScopeDelegate& onConfigureScope)
+{
 	TSharedPtr<FGenericPlatformSentryFeedback> Feedback = StaticCastSharedPtr<FGenericPlatformSentryFeedback>(feedback);
 
-	sentry_capture_feedback_with_hint(Feedback->GetNativeObject(), Feedback->GetHintNativeObject());
+	TSharedPtr<FPlatformSentryScope> LocalScope = MakeShareable(new FPlatformSentryScope());
+	onConfigureScope.ExecuteIfBound(LocalScope);
+
+	for (const TSharedPtr<ISentryAttachment>& Attachment : Feedback->GetAttachments())
+	{
+		LocalScope->AddAttachment(Attachment);
+	}
+
+	sentry_scope_t* scope = sentry_local_scope_new();
+	LocalScope->Apply(scope);
+
+	sentry_scope_capture_feedback(scope, Feedback->GetNativeObject(), nullptr);
 }
 
 void FGenericPlatformSentrySubsystem::SetUser(TSharedPtr<ISentryUser> InUser)
@@ -1304,49 +1346,38 @@ USentryTraceSampler* FGenericPlatformSentrySubsystem::GetTraceSampler() const
 	return sampler;
 }
 
-void FGenericPlatformSentrySubsystem::TryCaptureScreenshot()
+FString FGenericPlatformSentrySubsystem::TryCaptureScreenshot() const
 {
 	const FString& ScreenshotPath = GetScreenshotPath();
 
 	if (!SentryScreenshotUtils::CaptureScreenshot(ScreenshotPath))
 	{
 		// Screenshot capturing is a best-effort solution so if one wasn't captured skip the attachment
-		return;
+		return FString();
 	}
 
-	TSharedPtr<ISentryAttachment> ScreenshotAttachment =
-		MakeShareable(new FGenericPlatformSentryAttachment(ScreenshotPath, TEXT("screenshot.png"), TEXT("image/png")));
-
-	AddFileAttachment(ScreenshotAttachment);
+	return ScreenshotPath;
 }
 
-void FGenericPlatformSentrySubsystem::TryCaptureGpuDump()
+FString FGenericPlatformSentrySubsystem::TryCaptureGpuDump() const
 {
 	const FString& GpuDumpPath = SentryFileUtils::GetGpuDumpPath();
 
 	if (!IFileManager::Get().FileExists(*GpuDumpPath))
 	{
-		return;
+		return FString();
 	}
 
-	TSharedPtr<ISentryAttachment> GpuDumpAttachment =
-		MakeShareable(new FGenericPlatformSentryAttachment(GpuDumpPath, FPaths::GetCleanFilename(GpuDumpPath), TEXT("application/octet-stream")));
+	return GpuDumpPath;
+}
 
-	AddFileAttachment(GpuDumpAttachment);
-
-	// Attach NVIDIA Aftermath .nvdbg files written during this SDK session (older files are assumed to belong to previous crashes)
-	for (const FString& NvdbgPath : SentryFileUtils::GetGpuShaderDebugInfoPaths())
+TArray<FString> FGenericPlatformSentrySubsystem::GetSessionGpuShaderDebugInfoPaths() const
+{
+	// NVIDIA Aftermath .nvdbg files written before this SDK session are assumed to belong to previous crashes
+	return SentryFileUtils::GetGpuShaderDebugInfoPaths().FilterByPredicate([this](const FString& NvdbgPath)
 	{
-		if (IFileManager::Get().GetTimeStamp(*NvdbgPath) < initTimestamp)
-		{
-			continue;
-		}
-
-		TSharedPtr<ISentryAttachment> NvdbgAttachment =
-			MakeShareable(new FGenericPlatformSentryAttachment(NvdbgPath, FPaths::GetCleanFilename(NvdbgPath), TEXT("application/octet-stream")));
-
-		AddFileAttachment(NvdbgAttachment);
-	}
+		return IFileManager::Get().GetTimeStamp(*NvdbgPath) >= initTimestamp;
+	});
 }
 
 void FGenericPlatformSentrySubsystem::ConfigureAppHangTracking()
