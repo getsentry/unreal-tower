@@ -27,6 +27,7 @@
 #include "Utils/SentryFileUtils.h"
 
 #include "Dom/JsonObject.h"
+#include "GenericPlatform/GenericPlatformCrashContext.h"
 #include "HAL/FileManager.h"
 #include "Misc/CoreDelegates.h"
 #include "Misc/FileHelper.h"
@@ -69,8 +70,10 @@ void FAndroidSentrySubsystem::InitWithSettings(const USentrySettings* settings, 
 	SettingsJson->SetNumberField(TEXT("sessionTimeout"), settings->SessionTimeout);
 	SettingsJson->SetBoolField(TEXT("enableStackTrace"), settings->AttachStacktrace);
 	SettingsJson->SetBoolField(TEXT("debug"), settings->Debug);
+	SettingsJson->SetStringField(TEXT("debugLevel"), StaticEnum<ESentryLevel>()->GetNameStringByValue(static_cast<int64>(settings->DebugLevel)).ToUpper());
 	SettingsJson->SetNumberField(TEXT("sampleRate"), settings->SampleRate);
 	SettingsJson->SetNumberField(TEXT("maxBreadcrumbs"), settings->MaxBreadcrumbs);
+	SettingsJson->SetNumberField(TEXT("shutdownTimeout"), settings->ShutdownTimeout);
 	SettingsJson->SetBoolField(TEXT("attachScreenshot"), settings->AttachScreenshot);
 	SettingsJson->SetBoolField(TEXT("attachSessionReplay"), settings->AttachSessionReplay);
 	SettingsJson->SetArrayField(TEXT("inAppInclude"), FAndroidSentryConverters::StrinArrayToJsonArray(settings->InAppInclude));
@@ -89,7 +92,12 @@ void FAndroidSentrySubsystem::InitWithSettings(const USentrySettings* settings, 
 	SettingsJson->SetStringField(TEXT("deviceType"), GetDeviceType());
 	if (settings->EnableOfflineCaching)
 	{
-		SettingsJson->SetNumberField(TEXT("maxCacheItems"), settings->CacheMaxItems);
+		// sentry-java treats 0 as an empty cache, while the setting uses 0 for no limit
+		SettingsJson->SetNumberField(TEXT("maxCacheItems"), settings->CacheMaxItems > 0 ? settings->CacheMaxItems : MAX_int32);
+	}
+	if (settings->UseProxy && !settings->ProxyUrl.IsEmpty())
+	{
+		SettingsJson->SetStringField(TEXT("proxy"), settings->ProxyUrl);
 	}
 	if (settings->EnableTracing && settings->SamplingType == ESentryTracesSamplingType::UniformSampleRate)
 	{
@@ -188,7 +196,6 @@ void FAndroidSentrySubsystem::Close()
 		OnHasEnteredForegroundDelegateHandle.Reset();
 	}
 
-	FSentryJavaObjectWrapper::CallStaticMethod<void>(SentryJavaClasses::Sentry, "flush", "(J)V", (jlong)3000);
 	FSentryJavaObjectWrapper::CallStaticMethod<void>(SentryJavaClasses::Sentry, "close", "()V");
 }
 
@@ -379,7 +386,7 @@ TSharedPtr<ISentryId> FAndroidSentrySubsystem::CaptureEnsure(const FString& type
 		}
 	}
 
-	auto id = FSentryJavaObjectWrapper::CallStaticObjectMethod<jobject>(SentryJavaClasses::SentryBridgeJava, "captureException", "(Ljava/lang/String;Ljava/lang/String;Lio/sentry/Attachment;)Lio/sentry/protocol/SentryId;",
+	auto id = FSentryJavaObjectWrapper::CallStaticObjectMethod<jobject>(SentryJavaClasses::SentryBridgeJava, "captureEnsure", "(Ljava/lang/String;Ljava/lang/String;Lio/sentry/Attachment;)Lio/sentry/protocol/SentryId;",
 		*FSentryJavaObjectWrapper::GetJString(type), *FSentryJavaObjectWrapper::GetJString(message),
 		ScreenshotAttachment.IsValid() ? ScreenshotAttachment->GetJObject() : nullptr);
 
@@ -564,8 +571,16 @@ TSharedPtr<ISentryTransaction> FAndroidSentrySubsystem::StartTransactionWithCont
 
 TSharedPtr<ISentryTransaction> FAndroidSentrySubsystem::StartTransactionWithContextAndTimestamp(TSharedPtr<ISentryTransactionContext> context, int64 timestamp, bool bindToScope)
 {
-	UE_LOG(LogSentrySdk, Log, TEXT("Setting transaction timestamp explicitly not supported on Android."));
-	return StartTransactionWithContext(context, bindToScope);
+	TSharedPtr<FAndroidSentryTransactionContext> transactionContextAndroid = StaticCastSharedPtr<FAndroidSentryTransactionContext>(context);
+
+	TSharedPtr<FAndroidSentryTransactionOptions> transactionOptionsAndroid = MakeShareable(new FAndroidSentryTransactionOptions());
+	transactionOptionsAndroid->SetBindToScope(bindToScope);
+	transactionOptionsAndroid->SetStartTimestamp(timestamp);
+
+	auto transaction = FSentryJavaObjectWrapper::CallStaticObjectMethod<jobject>(SentryJavaClasses::Sentry, "startTransaction", "(Lio/sentry/TransactionContext;Lio/sentry/TransactionOptions;)Lio/sentry/ITransaction;",
+		transactionContextAndroid->GetJObject(), transactionOptionsAndroid->GetJObject());
+
+	return MakeShareable(new FAndroidSentryTransaction(*transaction));
 }
 
 TSharedPtr<ISentryTransaction> FAndroidSentrySubsystem::StartTransactionWithContextAndOptions(TSharedPtr<ISentryTransactionContext> context, const FSentryTransactionOptions& options)
@@ -587,11 +602,27 @@ TSharedPtr<ISentryTransactionContext> FAndroidSentrySubsystem::ContinueTrace(con
 	auto transactionContext = FSentryJavaObjectWrapper::CallStaticObjectMethod<jobject>(SentryJavaClasses::Sentry, "continueTrace", "(Ljava/lang/String;Ljava/util/List;)Lio/sentry/TransactionContext;",
 		*FSentryJavaObjectWrapper::GetJString(sentryTrace), FAndroidSentryConverters::StringArrayToNative(baggageHeaders)->GetJObject());
 
+	if (!transactionContext)
+	{
+		return nullptr;
+	}
+
 	return MakeShareable(new FAndroidSentryTransactionContext(*transactionContext));
 }
 
 void FAndroidSentrySubsystem::HandleAssert()
 {
+	// Set on the NDK scope directly since Java scope sync is asynchronous and may not finish before the crash
+	if (void* libsentryHandle = dlopen("libsentry.so", RTLD_NOLOAD | RTLD_NOW))
+	{
+		if (auto SetTagFunc = reinterpret_cast<void (*)(const char*, const char*)>(dlsym(libsentryHandle, "sentry_set_tag")))
+		{
+			SetTagFunc("CrashType", TCHAR_TO_UTF8(FGenericCrashContext::GetCrashTypeString(ECrashContextType::Assert)));
+		}
+
+		dlclose(libsentryHandle);
+	}
+
 	GError->HandleError();
 	PLATFORM_BREAK();
 }

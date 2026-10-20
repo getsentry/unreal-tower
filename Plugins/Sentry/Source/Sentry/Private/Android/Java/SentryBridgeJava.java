@@ -12,6 +12,8 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -30,7 +32,6 @@ import io.sentry.SentryOptions;
 import io.sentry.SentryReplayOptions;
 import io.sentry.android.core.SentryAndroid;
 import io.sentry.android.core.SentryAndroidOptions;
-import io.sentry.exception.ExceptionMechanismException;
 import io.sentry.protocol.Feedback;
 import io.sentry.protocol.Mechanism;
 import io.sentry.protocol.SentryException;
@@ -71,8 +72,10 @@ public class SentryBridgeJava {
 					options.setSessionTrackingIntervalMillis(settingJson.getLong("sessionTimeout"));
 					options.setAttachStacktrace(settingJson.getBoolean("enableStackTrace"));
 					options.setDebug(settingJson.getBoolean("debug"));
+					options.setDiagnosticLevel(SentryLevel.valueOf(settingJson.getString("debugLevel")));
 					options.setSampleRate(settingJson.getDouble("sampleRate"));
 					options.setMaxBreadcrumbs(settingJson.getInt("maxBreadcrumbs"));
+					options.setShutdownTimeoutMillis(settingJson.getLong("shutdownTimeout"));
 					options.setSendDefaultPii(settingJson.getBoolean("sendDefaultPii"));
 					if(settingJson.getBoolean("attachSessionReplay")) {
 						options.getSessionReplay().setSessionSampleRate(1.0);
@@ -96,6 +99,15 @@ public class SentryBridgeJava {
 					options.getMetrics().setEnabled(settingJson.getBoolean("enableMetrics"));
 					if(settingJson.has("maxCacheItems")) {
 						options.setMaxCacheItems(settingJson.getInt("maxCacheItems"));
+					}
+					if(settingJson.has("proxy")) {
+						String proxyUrl = settingJson.getString("proxy");
+						SentryOptions.Proxy proxy = parseProxy(proxyUrl);
+						if (proxy != null) {
+							options.setProxy(proxy);
+						} else {
+							options.getLogger().log(SentryLevel.WARNING, "Invalid or unsupported proxy URL (expected http://[user:pass@]host:port). Proxy is ignored");
+						}
 					}
 					if(settingJson.has("tracesSampleRate")) {
 						options.setTracesSampleRate(settingJson.getDouble("tracesSampleRate"));
@@ -198,12 +210,13 @@ public class SentryBridgeJava {
 		return feedbackId;
 	}
 
-	public static SentryId captureException(final String type, final String value, final Attachment screenshotAttachment) {
+	public static SentryId captureEnsure(final String type, final String value, final Attachment screenshotAttachment) {
 		SentryException exception = new SentryException();
 		exception.setType(type);
 		exception.setValue(value);
 		SentryEvent event = new SentryEvent();
 		event.setExceptions(Collections.singletonList(exception));
+		event.setTag("CrashType", "Ensure");
 
 		Hint hint = new Hint();
 		if (screenshotAttachment != null) {
@@ -313,13 +326,18 @@ public class SentryBridgeJava {
 	}
 
 	public static boolean isAnrEvent(final SentryEvent event) {
-		Throwable throwable = event.getThrowableMechanism();
-		if (throwable instanceof ExceptionMechanismException) {
-			Mechanism m = ((ExceptionMechanismException) throwable).getExceptionMechanism();
-			return m.getType().equals("ANR");
-		} else {
+		if (event.getExceptions() == null) {
 			return false;
 		}
+
+		for (SentryException exception : event.getExceptions()) {
+			final Mechanism mechanism = exception.getMechanism();
+			if ("ApplicationNotResponding".equals(exception.getType()) || (mechanism != null && "AppHang".equals(mechanism.getType()))) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	public static boolean isEmptyId(final SentryId id) {
@@ -576,6 +594,15 @@ public class SentryBridgeJava {
 				mergeContext(event, "device", Collections.singletonMap("device_type", deviceType));
 			}
 
+			if (event.getTag("CrashType") == null) {
+				// Fatal hangs are unhandled too, so check them first
+				if (isAnrEvent(event)) {
+					event.setTag("CrashType", "Hang");
+				} else if (event.isCrashed()) {
+					event.setTag("CrashType", "Crash");
+				}
+			}
+
 			if (attachLog) {
 				String logFilePath = getLogFilePath(event.isCrashed());
 				if (!logFilePath.isEmpty()) {
@@ -654,6 +681,39 @@ public class SentryBridgeJava {
 			}
 			return metricEvent;
 		}
+	}
+
+	private static SentryOptions.Proxy parseProxy(final String proxyUrl) {
+		URI uri;
+		try {
+			uri = new URI(proxyUrl);
+		} catch (URISyntaxException e) {
+			return null;
+		}
+		if (uri.getScheme() == null || uri.getHost() == null || uri.getPort() < 0 || uri.getPort() > 65535) {
+			return null;
+		}
+
+		String scheme = uri.getScheme().toLowerCase();
+		java.net.Proxy.Type type;
+		if (scheme.equals("http")) {
+			type = java.net.Proxy.Type.HTTP;
+		} else if (scheme.startsWith("socks")) {
+			type = java.net.Proxy.Type.SOCKS;
+		} else {
+			return null;
+		}
+
+		String user = null;
+		String pass = null;
+		String userInfo = uri.getUserInfo();
+		if (userInfo != null) {
+			int separator = userInfo.indexOf(':');
+			user = separator >= 0 ? userInfo.substring(0, separator) : userInfo;
+			pass = separator >= 0 ? userInfo.substring(separator + 1) : null;
+		}
+
+		return new SentryOptions.Proxy(uri.getHost(), String.valueOf(uri.getPort()), type, user, pass);
 	}
 
 	private static byte[] readFileToBytes(File file) throws Exception {

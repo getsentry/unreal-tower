@@ -24,15 +24,21 @@ public:
 	virtual void SetData(const FString& key, const TMap<FString, FSentryVariant>& values) override;
 	virtual void RemoveData(const FString& key) override;
 	virtual void GetTrace(FString& name, FString& value) override;
+	virtual TMap<FString, FString> GetTraceHeaders() override;
 
 private:
 	FSentryJavaMethod StartChildMethod;
+	FSentryJavaMethod StartChildWithTimestampMethod;
 	FSentryJavaMethod FinishMethod;
+	FSentryJavaMethod FinishWithTimestampMethod;
+	FSentryJavaMethod GetStatusMethod;
 	FSentryJavaMethod IsFinishedMethod;
 	FSentryJavaMethod SetNameMethod;
 	FSentryJavaMethod SetTagMethod;
 	FSentryJavaMethod SetDataMethod;
 	FSentryJavaMethod ToSentryTraceMethod;
+	FSentryJavaMethod ToBaggageHeaderMethod;
+	FSentryJavaMethod IsNoOpMethod;
 };
 
 typedef FAndroidSentryTransaction FPlatformSentryTransaction;

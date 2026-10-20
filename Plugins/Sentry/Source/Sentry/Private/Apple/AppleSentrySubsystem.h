@@ -4,6 +4,8 @@
 
 #if !USE_SENTRY_NATIVE
 
+#include "GenericPlatform/GenericPlatformCrashContext.h"
+
 #include "Interface/SentrySubsystemInterface.h"
 
 #ifdef USE_SENTRY_SESSION_REPLAY
@@ -11,7 +13,9 @@
 #endif
 
 @class SentryObjCHint;
+@class SentryObjCEvent;
 @class SentryObjCScope;
+@class NSURLSession;
 
 class FAppleSentrySubsystem : public ISentrySubsystem
 {
@@ -65,11 +69,13 @@ public:
 	virtual TSharedPtr<ISentryTransaction> StartTransactionWithContextAndOptions(TSharedPtr<ISentryTransactionContext> context, const FSentryTransactionOptions& options) override;
 	virtual TSharedPtr<ISentryTransactionContext> ContinueTrace(const FString& sentryTrace, const TArray<FString>& baggageHeaders) override;
 
-	virtual void HandleAssert() override {}
+	virtual void HandleAssert() override;
 
 	virtual FString TryCaptureScreenshot() const { return FString(); };
 
 protected:
+	void SetEventCrashType(SentryObjCEvent* event, ECrashContextType crashType) const;
+
 	void AddCrashAttachmentsToHint(SentryObjCHint* hint) const;
 
 	void AddGameLogAttachmentToScope(SentryObjCScope* scope) const;
@@ -87,6 +93,12 @@ protected:
 	bool isSessionReplayAttachmentEnabled = false;
 
 private:
+	TMap<FString, FString> ParseSentryBaggage(const TArray<FString>& baggageHeaders) const;
+
+	void ReleaseProxySession();
+
+	NSURLSession* ProxySession = nullptr;
+
 #ifdef USE_SENTRY_SESSION_REPLAY
 	void StartSessionReplay(const USentrySettings* settings);
 

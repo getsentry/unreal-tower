@@ -27,9 +27,11 @@ const FSentryJavaClass SentryJavaClasses::CustomSamplingContext	= FSentryJavaCla
 const FSentryJavaClass SentryJavaClasses::TransactionContext	= FSentryJavaClass { "io/sentry/TransactionContext", ESentryJavaClassType::External };
 const FSentryJavaClass SentryJavaClasses::TransactionOptions	= FSentryJavaClass { "io/sentry/TransactionOptions", ESentryJavaClassType::External };
 const FSentryJavaClass SentryJavaClasses::SentryTraceHeader		= FSentryJavaClass { "io/sentry/SentryTraceHeader", ESentryJavaClassType::External };
+const FSentryJavaClass SentryJavaClasses::BaggageHeader			= FSentryJavaClass { "io/sentry/BaggageHeader", ESentryJavaClassType::External };
 const FSentryJavaClass SentryJavaClasses::SentryLogEvent		= FSentryJavaClass { "io/sentry/SentryLogEvent", ESentryJavaClassType::External };
 const FSentryJavaClass SentryJavaClasses::SentryLogLevel		= FSentryJavaClass { "io/sentry/SentryLogLevel", ESentryJavaClassType::External };
 const FSentryJavaClass SentryJavaClasses::SentryMetricsEvent	= FSentryJavaClass { "io/sentry/SentryMetricsEvent", ESentryJavaClassType::External };
+const FSentryJavaClass SentryJavaClasses::SentryLongDate		= FSentryJavaClass { "io/sentry/SentryLongDate", ESentryJavaClassType::External };
 
 // System Java classes definitions
 const FSentryJavaClass SentryJavaClasses::ArrayList				= FSentryJavaClass { "java/util/ArrayList", ESentryJavaClassType::System };
@@ -72,9 +74,11 @@ void SentryJavaClasses::InitJavaClassRefsCache()
 	JavaClassRefsCache.Add(TransactionContext.Name, FindJavaClassRef(TransactionContext));
 	JavaClassRefsCache.Add(TransactionOptions.Name, FindJavaClassRef(TransactionOptions));
 	JavaClassRefsCache.Add(SentryTraceHeader.Name, FindJavaClassRef(SentryTraceHeader));
+	JavaClassRefsCache.Add(BaggageHeader.Name, FindJavaClassRef(BaggageHeader));
 	JavaClassRefsCache.Add(SentryLogEvent.Name, FindJavaClassRef(SentryLogEvent));
 	JavaClassRefsCache.Add(SentryLogLevel.Name, FindJavaClassRef(SentryLogLevel));
 	JavaClassRefsCache.Add(SentryMetricsEvent.Name, FindJavaClassRef(SentryMetricsEvent));
+	JavaClassRefsCache.Add(SentryLongDate.Name, FindJavaClassRef(SentryLongDate));
 
 	// System Java classes definitions
 	JavaClassRefsCache.Add(ArrayList.Name, FindJavaClassRef(ArrayList));

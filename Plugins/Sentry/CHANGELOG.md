@@ -1,5 +1,42 @@
 # Changelog
 
+## 1.25.0
+
+### Features
+
+- Add support for explicit timestamps when starting or finishing transactions and spans on macOS, iOS and Android ([#1608](https://github.com/getsentry/sentry-unreal/pull/1608))
+- Keep sampling decisions consistent across services when propagating or continuing traces ([#1612](https://github.com/getsentry/sentry-unreal/pull/1612))
+- Show plugin settings platform, engine version and rebuild requirements in editor UI ([#1629](https://github.com/getsentry/sentry-unreal/pull/1629))
+- Add HTTP proxy support on Android, macOS and iOS ([#1631](https://github.com/getsentry/sentry-unreal/pull/1631))
+- Apply `ShutdownTimeout` setting on Android, macOS and iOS ([#1632](https://github.com/getsentry/sentry-unreal/pull/1632))
+- Regroup plugin settings into feature-based sections ([#1633](https://github.com/getsentry/sentry-unreal/pull/1633))
+- Add diagnostic logging level setting ([#1637](https://github.com/getsentry/sentry-unreal/pull/1637))
+
+### Fixes
+
+- Fix crash when a span is finished twice or used from multiple threads on native platforms ([#1609](https://github.com/getsentry/sentry-unreal/pull/1609))
+- Fix `BeforeSend` handler receiving transactions on macOS/iOS ([#1610](https://github.com/getsentry/sentry-unreal/pull/1610))
+- Fix `IsAnr` returning `false` for most app hang events on macOS, iOS and Android ([#1618](https://github.com/getsentry/sentry-unreal/pull/1618))
+- Fix missing `CrashType` tag on errors captured on Apple/Android and on native app hangs ([#1619](https://github.com/getsentry/sentry-unreal/pull/1619))
+- Fix crash when reading a missing context or other collection from events, scopes, breadcrumbs or users on Android ([#1622](https://github.com/getsentry/sentry-unreal/pull/1622))
+- Fix assertion callstack frames being captured as error breadcrumbs on iOS ([#1627](https://github.com/getsentry/sentry-unreal/pull/1627))
+- Fix `CacheMaxItems` set to `0` dropping all events on macOS, iOS and Android instead of disabling the limit ([#1634](https://github.com/getsentry/sentry-unreal/pull/1634))
+
+### Dependencies
+
+- Bump Cocoa SDK from v9.29.2 to v9.30.2 ([#1606](https://github.com/getsentry/sentry-unreal/pull/1606), [#1621](https://github.com/getsentry/sentry-unreal/pull/1621), [#1635](https://github.com/getsentry/sentry-unreal/pull/1635))
+  - [changelog](https://github.com/getsentry/sentry-cocoa/blob/main/CHANGELOG.md#9302)
+  - [diff](https://github.com/getsentry/sentry-cocoa/compare/9.29.2...9.30.2)
+- Bump Java SDK from v8.58.0 to v8.61.0 ([#1607](https://github.com/getsentry/sentry-unreal/pull/1607), [#1620](https://github.com/getsentry/sentry-unreal/pull/1620), [#1636](https://github.com/getsentry/sentry-unreal/pull/1636))
+  - [changelog](https://github.com/getsentry/sentry-java/blob/main/CHANGELOG.md#8610)
+  - [diff](https://github.com/getsentry/sentry-java/compare/8.58.0...8.61.0)
+- Bump Native SDK from v0.17.1 to v0.17.4 ([#1614](https://github.com/getsentry/sentry-unreal/pull/1614), [#1630](https://github.com/getsentry/sentry-unreal/pull/1630), [#1639](https://github.com/getsentry/sentry-unreal/pull/1639))
+  - [changelog](https://github.com/getsentry/sentry-native/blob/master/CHANGELOG.md#0174)
+  - [diff](https://github.com/getsentry/sentry-native/compare/0.17.1...0.17.4)
+- Bump Android Gradle Plugin from v6.23.0 to v6.24.0 ([#1640](https://github.com/getsentry/sentry-unreal/pull/1640))
+  - [changelog](https://github.com/getsentry/sentry-android-gradle-plugin/blob/main/CHANGELOG.md#6240)
+  - [diff](https://github.com/getsentry/sentry-android-gradle-plugin/compare/6.23.0...6.24.0)
+
 ## 1.24.0
 
 ### Features

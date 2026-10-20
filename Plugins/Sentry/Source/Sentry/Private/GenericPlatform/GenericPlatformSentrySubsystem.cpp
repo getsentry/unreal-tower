@@ -178,6 +178,11 @@ sentry_value_t FGenericPlatformSentrySubsystem::OnBeforeSend(sentry_value_t even
 		return event;
 	}
 
+	if (!isCrash && FGenericPlatformSentryEvent::IsAnr(event))
+	{
+		SetEventCrashType(event, ECrashContextType::Hang);
+	}
+
 	USentryBeforeSendHandler* Handler = GetBeforeSendHandler();
 	if (!Handler)
 	{
@@ -680,6 +685,7 @@ void FGenericPlatformSentrySubsystem::InitWithSettings(const USentrySettings* se
 	sentry_options_set_dist(options, TCHAR_TO_UTF8(*settings->Dist));
 	sentry_options_set_logger(options, PrintVerboseLog, nullptr);
 	sentry_options_set_debug(options, settings->Debug);
+	sentry_options_set_logger_level(options, FGenericPlatformSentryConverters::SentryLevelToNative(settings->DebugLevel));
 	sentry_options_set_auto_session_tracking(options, settings->EnableAutoSessionTracking);
 	sentry_options_set_sample_rate(options, settings->SampleRate);
 	sentry_options_set_max_breadcrumbs(options, settings->MaxBreadcrumbs);
@@ -1311,7 +1317,10 @@ TSharedPtr<ISentryTransactionContext> FGenericPlatformSentrySubsystem::ContinueT
 
 	sentry_transaction_context_update_from_header(transactionContext->GetNativeObject(), "sentry-trace", TCHAR_TO_UTF8(*sentryTrace));
 
-	// currently `sentry-native` doesn't have API for `sentry_transaction_context_t` to set `baggageHeaders`
+	for (const FString& baggage : baggageHeaders)
+	{
+		sentry_transaction_context_update_from_header(transactionContext->GetNativeObject(), "baggage", TCHAR_TO_UTF8(*baggage));
+	}
 
 	return transactionContext;
 }

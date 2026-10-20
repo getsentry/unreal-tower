@@ -100,9 +100,40 @@ extern "C" {
 #        define SENTRY_SDK_NAME "sentry.native"
 #    endif
 #endif
+
+/**
+ * Compile-time SDK version as string.
+ *
+ * May include a prerelease suffix (e.g. `-rc.1`) or downstream SDK build
+ * metadata (e.g. `+YYYYMMDD`). Use `SENTRY_SDK_VERSION_AT_LEAST` for version
+ * checks, or `sentry_sdk_version()` for the runtime version.
+ */
 #ifndef SENTRY_SDK_VERSION
-#    define SENTRY_SDK_VERSION "0.17.1"
+#    define SENTRY_SDK_VERSION "0.17.4"
 #endif
+
+/**
+ * Compile-time SDK version `major.minor.patch` as individual numbers.
+ */
+#define SENTRY_SDK_VERSION_MAJOR 0
+#define SENTRY_SDK_VERSION_MINOR 17
+#define SENTRY_SDK_VERSION_PATCH 4
+
+/**
+ * Checks whether the compile-time SDK version is at least `major.minor.patch`.
+ *
+ * ```c
+ * #if SENTRY_SDK_VERSION_AT_LEAST(1, 2, 3)
+ *     // use APIs introduced in 1.2.3
+ * #endif
+ * ```
+ */
+#define SENTRY_SDK_VERSION_AT_LEAST(major, minor, patch)                       \
+    (SENTRY_SDK_VERSION_MAJOR > (major)                                        \
+        || (SENTRY_SDK_VERSION_MAJOR == (major)                                \
+            && (SENTRY_SDK_VERSION_MINOR > (minor)                             \
+                || (SENTRY_SDK_VERSION_MINOR == (minor)                        \
+                    && SENTRY_SDK_VERSION_PATCH >= (patch)))))
 #define SENTRY_SDK_USER_AGENT SENTRY_SDK_NAME "/" SENTRY_SDK_VERSION
 
 /* marks a function as part of the sentry API */
@@ -565,6 +596,16 @@ SENTRY_API int sentry_value_is_true(sentry_value_t value);
 SENTRY_API int sentry_value_is_null(sentry_value_t value);
 
 /**
+ * Deserialize a sentry value from JSON.
+ *
+ * Parses the given JSON string into a new value.
+ *
+ * The returned value must be released with `sentry_value_decref`.
+ */
+SENTRY_API sentry_value_t sentry_value_from_json(
+    const char *buf, size_t buf_len);
+
+/**
  * Serialize a sentry value to JSON.
  *
  * The string is freshly allocated and must be freed with
@@ -629,9 +670,9 @@ SENTRY_API sentry_value_t sentry_value_new_breadcrumb_n(
  * The returned value needs to be attached to an event via
  * `sentry_event_add_exception`.
  */
-SENTRY_EXPERIMENTAL_API sentry_value_t sentry_value_new_exception(
+SENTRY_API sentry_value_t sentry_value_new_exception(
     const char *type, const char *value);
-SENTRY_EXPERIMENTAL_API sentry_value_t sentry_value_new_exception_n(
+SENTRY_API sentry_value_t sentry_value_new_exception_n(
     const char *type, size_t type_len, const char *value, size_t value_len);
 
 /**
@@ -644,9 +685,9 @@ SENTRY_EXPERIMENTAL_API sentry_value_t sentry_value_new_exception_n(
  *
  * `name` can be NULL.
  */
-SENTRY_EXPERIMENTAL_API sentry_value_t sentry_value_new_thread(
+SENTRY_API sentry_value_t sentry_value_new_thread(
     uint64_t id, const char *name);
-SENTRY_EXPERIMENTAL_API sentry_value_t sentry_value_new_thread_n(
+SENTRY_API sentry_value_t sentry_value_new_thread_n(
     uint64_t id, const char *name, size_t name_len);
 
 /**
@@ -660,8 +701,7 @@ SENTRY_EXPERIMENTAL_API sentry_value_t sentry_value_new_thread_n(
  * If `ips` is NULL, the current stack trace is captured. Otherwise, `len`
  * stack trace instruction pointers are attached to the event.
  */
-SENTRY_EXPERIMENTAL_API sentry_value_t sentry_value_new_stacktrace(
-    void **ips, size_t len);
+SENTRY_API sentry_value_t sentry_value_new_stacktrace(void **ips, size_t len);
 
 /**
  * Sets the Stack Trace conforming to the Stack Trace Interface in a value.
@@ -671,13 +711,13 @@ SENTRY_EXPERIMENTAL_API sentry_value_t sentry_value_new_stacktrace(
  * If `ips` is NULL, the current stack trace is captured. Otherwise, `len` stack
  * trace instruction pointers are attached to the event.
  */
-SENTRY_EXPERIMENTAL_API void sentry_value_set_stacktrace(
+SENTRY_API void sentry_value_set_stacktrace(
     sentry_value_t value, void **ips, size_t len);
 
 /**
  * Sets the level of an Event value.
  */
-SENTRY_EXPERIMENTAL_API void sentry_event_set_level(
+SENTRY_API void sentry_event_set_level(
     sentry_value_t event, sentry_level_t level);
 
 /**
@@ -685,7 +725,7 @@ SENTRY_EXPERIMENTAL_API void sentry_event_set_level(
  *
  * This takes ownership of the `exception`.
  */
-SENTRY_EXPERIMENTAL_API void sentry_event_add_exception(
+SENTRY_API void sentry_event_add_exception(
     sentry_value_t event, sentry_value_t exception);
 
 /**
@@ -693,7 +733,7 @@ SENTRY_EXPERIMENTAL_API void sentry_event_add_exception(
  *
  * This takes ownership of the `thread`.
  */
-SENTRY_EXPERIMENTAL_API void sentry_event_add_thread(
+SENTRY_API void sentry_event_add_thread(
     sentry_value_t event, sentry_value_t thread);
 
 /* -- Experimental APIs -- */
@@ -705,8 +745,34 @@ SENTRY_EXPERIMENTAL_API void sentry_event_add_thread(
  * `sentry_free`. Since msgpack is not zero terminated,
  * the size is written to the `size_out` parameter.
  */
-SENTRY_EXPERIMENTAL_API char *sentry_value_to_msgpack(
+SENTRY_API char *sentry_value_to_msgpack(
     sentry_value_t value, size_t *size_out);
+
+/**
+ * Deserialize a single sentry value from msgpack.
+ *
+ * The value must span the whole buffer; buffers containing multiple
+ * sequential msgpack values (as in append-only streams like breadcrumb ring
+ * files) are rejected with null and must be decoded with
+ * `sentry_value_from_msgpack_stream`.
+ *
+ * The returned value must be released with `sentry_value_decref`.
+ */
+SENTRY_API sentry_value_t sentry_value_from_msgpack(
+    const char *buf, size_t buf_len);
+
+/**
+ * Deserialize a buffer of sequential msgpack values into a list.
+ *
+ * Unlike `sentry_value_from_msgpack`, the result is a list even when the
+ * buffer holds a single value, so files written as append-only streams (e.g.
+ * breadcrumb ring files) decode to a consistent shape. Returns null for an
+ * empty buffer or when the first value fails to parse.
+ *
+ * The returned value must be released with `sentry_value_decref`.
+ */
+SENTRY_API sentry_value_t sentry_value_from_msgpack_stream(
+    const char *buf, size_t buf_len);
 
 /**
  * Adds a stack trace to an event.
@@ -750,7 +816,7 @@ typedef struct sentry_ucontext_s {
  * caller allocated `stacktrace_out`, with up to `max_len` frames being written.
  * The actual number of unwound stack frames is returned.
  */
-SENTRY_EXPERIMENTAL_API size_t sentry_unwind_stack(
+SENTRY_API size_t sentry_unwind_stack(
     void *addr, void **stacktrace_out, size_t max_len);
 
 /**
@@ -764,7 +830,7 @@ SENTRY_EXPERIMENTAL_API size_t sentry_unwind_stack(
  * caller allocated `stacktrace_out`, with up to `max_len` frames being written.
  * The actual number of unwound stack frames is returned.
  */
-SENTRY_EXPERIMENTAL_API size_t sentry_unwind_stack_from_ucontext(
+SENTRY_API size_t sentry_unwind_stack_from_ucontext(
     const sentry_ucontext_t *uctx, void **stacktrace_out, size_t max_len);
 
 /**
@@ -1901,18 +1967,27 @@ SENTRY_API int sentry_options_get_require_user_consent(
     const sentry_options_t *opts);
 
 /**
- * Enables or disables on-device symbolication of stack traces.
+ * Enables or disables client-side symbolication of stack traces.
  *
- * This feature can have a performance impact and is enabled by default on
- * Android. It is usually only necessary when it is not possible to provide
- * debug information files for system libraries which are needed for serverside
- * symbolication.
+ * Client-side symbolication is useful for resolving system library frames
+ * when debug information files cannot be provided for server-side
+ * symbolication, and for displaying readable stack traces in external crash
+ * reporters.
+ *
+ * The native backend enables symbolication by default on all supported
+ * platforms, because crash symbolication runs in a separate daemon process.
+ * Other backends enable symbolication by default on Android, AIX, and
+ * PlayStation.
+ *
+ * This feature can have a performance impact. Symbolication runs in the
+ * application process when handling crashes with the inproc backend, or when
+ * capturing events using `sentry_capture_event` with any backend.
  */
 SENTRY_API void sentry_options_set_symbolize_stacktraces(
     sentry_options_t *opts, int val);
 
 /**
- * Returns true if on-device symbolication of stack traces is enabled.
+ * Returns true if client-side symbolication of stack traces is enabled.
  */
 SENTRY_API int sentry_options_get_symbolize_stacktraces(
     const sentry_options_t *opts);
@@ -2370,6 +2445,16 @@ SENTRY_API void sentry_options_set_crashpad_limit_stack_capture_to_sp(
     sentry_options_t *opts, int enabled);
 
 /**
+ * Sets the maximum stack capture size for non-crashing threads.
+ * A value of `0` disables the limit. This is disabled by default.
+ *
+ * This setting only has an effect when using the `crashpad` or `native` backend
+ * on Linux.
+ */
+SENTRY_API void sentry_options_set_max_stack_capture_size(
+    sentry_options_t *opts, uint32_t max_stack_capture_size);
+
+/**
  * Sets the maximum time (in milliseconds) to wait for the asynchronous
  * tasks to end on shutdown before attempting a forced termination.
  */
@@ -2502,7 +2587,7 @@ SENTRY_EXPERIMENTAL_API void sentry_clear_modulecache(void);
  *
  * Returns 0 on success.
  */
-SENTRY_EXPERIMENTAL_API int sentry_reinstall_backend(void);
+SENTRY_API int sentry_reinstall_backend(void);
 
 /**
  * Gives user consent.
@@ -2674,8 +2759,7 @@ SENTRY_API sentry_uuid_t sentry_capture_minidumpw_n(
  *       and `breakpad` support it on all platforms (on macOS, the `uctx`
  *       argument is ignored when using the `breakpad` backend).
  */
-SENTRY_EXPERIMENTAL_API void sentry_handle_exception(
-    const sentry_ucontext_t *uctx);
+SENTRY_API void sentry_handle_exception(const sentry_ucontext_t *uctx);
 
 /**
  * Deliberately crashes the current process.
@@ -3059,6 +3143,23 @@ SENTRY_API int sentry_options_get_strict_trace_continuation(
 SENTRY_EXPERIMENTAL_API void sentry_options_set_http_retry(
     sentry_options_t *opts, int enabled);
 SENTRY_EXPERIMENTAL_API int sentry_options_get_http_retry(
+    const sentry_options_t *opts);
+
+/**
+ * Enables or disables attaching a stack trace to events that carry none.
+ *
+ * Events captured without an exception or a thread stack trace, like messages,
+ * get the stack trace of the capturing thread attached as a thread. Events
+ * that already carry a stack trace, including crashes, are left untouched.
+ *
+ * Attaching a stack trace makes messages group by call site rather than by
+ * message text.
+ *
+ * Disabled by default.
+ */
+SENTRY_EXPERIMENTAL_API void sentry_options_set_attach_stacktrace(
+    sentry_options_t *opts, int attach_stacktrace);
+SENTRY_EXPERIMENTAL_API int sentry_options_get_attach_stacktrace(
     const sentry_options_t *opts);
 
 /**
@@ -3615,8 +3716,7 @@ SENTRY_API void sentry_end_session(void);
 /**
  * Ends a session with an explicit `status` code.
  */
-SENTRY_EXPERIMENTAL_API void sentry_end_session_with_status(
-    sentry_session_status_t status);
+SENTRY_API void sentry_end_session_with_status(sentry_session_status_t status);
 
 /* -- Performance Monitoring/Tracing APIs -- */
 
@@ -4389,7 +4489,7 @@ SENTRY_API void sentry_transaction_iter_headers(sentry_transaction_t *tx,
  *   0 = no crash recognized
  *  -1 = sentry_init() hasn't been called yet
  */
-SENTRY_EXPERIMENTAL_API int sentry_get_crashed_last_run(void);
+SENTRY_API int sentry_get_crashed_last_run(void);
 
 /**
  * Clear the persisted status of the "crashed-last-run".
@@ -4405,9 +4505,13 @@ SENTRY_DEPRECATED("The crash marker is cleared by `sentry_init()`.")
 SENTRY_EXPERIMENTAL_API int sentry_clear_crashed_last_run(void);
 
 /**
- * Sentry SDK version.
+ * Returns the runtime SDK version as string.
+ *
+ * May include a prerelease suffix (e.g. `-rc.1`) or downstream SDK build
+ * metadata (e.g. `+YYYYMMDD`). Use `SENTRY_SDK_VERSION` for the compile-time
+ * version.
  */
-SENTRY_EXPERIMENTAL_API const char *sentry_sdk_version(void);
+SENTRY_API const char *sentry_sdk_version(void);
 
 /**
  * Sentry SDK name set during build time.
