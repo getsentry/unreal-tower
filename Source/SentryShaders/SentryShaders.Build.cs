@@ -29,6 +29,13 @@ public class SentryShaders: ModuleRules
 			"RHI",
 			"Projects"
 		});
+
+		// Raw D3D12 dispatch of the GPU page fault (PageFault.cpp).
+		if (Target.Platform.IsInGroup(UnrealPlatformGroup.Windows))
+		{
+			AddEngineThirdPartyPrivateStaticDependencies(Target, "DX12");
+			PrivateDependencyModuleNames.Add("D3D12RHI");
+		}
 		
 		if (Target.bBuildEditor == true)
 		{

@@ -10,6 +10,7 @@
 
 #if PLATFORM_WINDOWS
 #include "SentryShaders/HeavyComputeLoop/HeavyComputeLoop.h"
+#include "SentryShaders/PageFault/PageFault.h"
 #endif
 
 #include "SentryTower/Enemy/SentryTowerEnemyBase.h"
@@ -22,6 +23,13 @@ void ASentryTowerPlayerController::BeginPlay()
 	if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
 	{
 		Subsystem->AddMappingContext(DefaultMappingContext, 0);
+	}
+
+	// Launched with `-gpu-pagefault`: fault the GPU once the level has been running for a while.
+	if (FParse::Param(FCommandLine::Get(), TEXT("gpu-pagefault")))
+	{
+		FTimerHandle GpuPageFaultTimer;
+		GetWorldTimerManager().SetTimer(GpuPageFaultTimer, this, &ASentryTowerPlayerController::OnTriggerGpuPageFault, 20.0f, false);
 	}
 }
 
@@ -51,6 +59,15 @@ void ASentryTowerPlayerController::OnOpenMenuStarted()
 	UE_LOG(LogTemp, Log, TEXT("ASentryTowerPlayerController: Open menu!"));
 
 	OnOpenMenu.Broadcast();
+}
+
+void ASentryTowerPlayerController::OnTriggerGpuPageFault()
+{
+	UE_LOG(LogTemp, Log, TEXT("ASentryTowerPlayerController: Trigger GPU page fault!"));
+
+#if PLATFORM_WINDOWS
+	FPageFaultInterface::Dispatch();
+#endif
 }
 
 void ASentryTowerPlayerController::OnTriggerGpuCrashStarted()
