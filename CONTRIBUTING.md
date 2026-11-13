@@ -54,6 +54,26 @@ void HeavyComputeLoop(uint3 DispatchThreadId : SV_DispatchThreadID, uint GroupIn
 
 In order to be able to capture GPU crashes, the game has to be built with Unreal Engine version that addops this [change](https://github.com/EpicGames/UnrealEngine/pull/12648) (starting from UE 5.7 it is available out of the box).
 
+### GPU page fault
+
+Launch the game with the `-gpu-pagefault` parameter to make a shader access memory that does not exist, 20 seconds after the level starts. The GPU reports a page fault in that shader, and the NVIDIA Aftermath dump names it as the faulted shader (`Faulted Warps`). Windows and D3D12 only.
+
+The shader source code is located in the project at `Source/SentryShaders/PageFault/TouchUnmappedMemory.hlsl`. It is compiled offline to the byte array in `TouchUnmappedMemory.h` and dispatched with raw D3D12 calls, because the RHI bounds-checks every buffer view: the shader writes through a root UAV, which is only a GPU address, and `FPageFaultInterface::Dispatch` points it at unmapped memory.
+
+```hlsl
+RWByteAddressBuffer Target : register(u0);
+
+[RootSignature("UAV(u0)")]
+[numthreads(64, 1, 1)]
+void TouchUnmappedMemory(uint3 DispatchThreadId : SV_DispatchThreadID)
+{
+	const uint Address = DispatchThreadId.x * 4;
+	Target.Store(Address, Target.Load(Address) + 1);
+}
+```
+
+The shader is not part of the cooked shader library, so the shader symbol upload of the cook does not include it. To see its name in Sentry, upload its DXIL binary separately.
+
 ### HTTP request error
 
 Open the in-game shop (button with a cart icon in the upper-right corner of the screen) to purchase the tower upgrade. After clicking the `Upgrade Tower` button the game will send an HTTP request to a dummy server which is expected to return an error. Also, this will trigger the `ensure` check in the corresponding request handler to fail (see `USentryTowerGameInstance::BuyUpgrade` for more details).

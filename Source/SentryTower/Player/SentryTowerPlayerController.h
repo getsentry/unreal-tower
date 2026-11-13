@@ -32,6 +32,7 @@ protected:
 	/** Input handlers. */
 	void OnOpenMenuStarted();
 	void OnTriggerGpuCrashStarted();
+	void OnTriggerGpuPageFault();
 
 public:
 
