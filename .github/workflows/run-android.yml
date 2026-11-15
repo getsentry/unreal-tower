@@ -22,7 +22,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           repository: getsentry/app-runner
-          ref: 8be06e220d490e527b810f6d073872025bf491b3
+          ref: aeae6e15b97ce37acac0d55ff48199c842d2a075
           path: app-runner
 
       - name: Get latest build run
