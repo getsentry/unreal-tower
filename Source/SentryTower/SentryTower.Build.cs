@@ -15,8 +15,8 @@ public class SentryTower : ModuleRules
 			PrivateDependencyModuleNames.AddRange(new string[] { "SentryShaders" });
 		}
 
-		// Uncomment if you are using Slate UI
-		// PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
+		// Slate is used by the native file dialog to find the game window to parent it to
+		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
 		
 		// Uncomment if you are using online features
 		// PrivateDependencyModuleNames.Add("OnlineSubsystem");
