@@ -92,6 +92,13 @@ All captured crash events should have the following attachments:
 - NVidia aftermath GPU crash dump (for GPU crashes)
 - Game log (if logging is enabled, i.e. Development build)
 
+## User feedback
+
+Open the game menu and click `SUBMIT FEEDBACK` to bring up the feedback dialog (see `Content/UI/W_FeedbackDialog.uasset`). It sends the message, along with the optional name, email and event ID, to Sentry as user feedback.
+
+- The event ID links the feedback to an existing Sentry event. Both the 32-character and the dashed UUID forms are accepted; anything else is ignored.
+- On Windows, `ADD FILES` opens the native file picker and attaches the selected files to the feedback. On other platforms the attachment controls are hidden (see `USentryTowerFileDialogLibrary`).
+
 ## Self-playing mode
 
 Launch the game with the `--idle` parameter to enable self-play mode (useful for running tests in a CI environment). In this mode, user input is not required. The game automatically responds to certain events (e.g., level-up, game over) by randomly selecting from a set of predefined actions.
