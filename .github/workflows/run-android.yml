@@ -2,6 +2,11 @@ name: Run Demo (Android)
 
 on:
   workflow_call:
+    inputs:
+      build-branch:
+        description: 'Branch to run the latest successful build from (default: main)'
+        type: string
+        default: ''
 
 jobs:
   run:
@@ -27,10 +32,13 @@ jobs:
 
       - name: Get latest build run
         id: get-run
+        env:
+          BUILD_BRANCH: ${{ inputs.build-branch || 'main' }}
         shell: pwsh
         run: |
-          $runs = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/actions/workflows/ci.yml/runs?status=success&per_page=1" -Headers @{Authorization="Bearer ${{ secrets.GITHUB_TOKEN }}"}
+          $runs = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/actions/workflows/ci.yml/runs?status=success&per_page=1&branch=$([uri]::EscapeDataString($env:BUILD_BRANCH))" -Headers @{Authorization="Bearer ${{ secrets.GITHUB_TOKEN }}"}
           $runId = $runs.workflow_runs[0].id
+          if (-not $runId) { throw "No successful build found on $env:BUILD_BRANCH" }
           echo "run-id=$runId" >> $env:GITHUB_OUTPUT
 
       - name: Download SentryTower
