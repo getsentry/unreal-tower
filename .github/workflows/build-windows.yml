@@ -37,6 +37,12 @@ jobs:
           path: checkout
           submodules: recursive
 
+      - name: Set up Sentry SDK
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./checkout/scripts/setup-sentry-sdk.ps1
+
       - name: Build game
         run: |
           docker exec unreal C:\UnrealEngine\Engine\Build\BatchFiles\RunUAT.bat BuildCookRun `
