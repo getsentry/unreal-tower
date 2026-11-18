@@ -44,12 +44,24 @@ bool USentryTowerFileDialogLibrary::OpenFileDialog(const FString& Title, TArray<
 
 			// Parent the dialog to the game window so it stays on top of it and is modal to it.
 			HWND ParentWindow = nullptr;
-			if (FSlateApplication::IsInitialized())
+			const bool bSlateInitialized = FSlateApplication::IsInitialized();
+			if (bSlateInitialized)
 			{
 				ParentWindow = (HWND)FSlateApplication::Get().FindBestParentWindowHandleForDialogs(nullptr);
+
+				// Tell Slate a native modal window is up: it closes menus and tooltips and disables its windows
+				// until the dialog is dismissed, same as the engine does for its own file dialogs.
+				FSlateApplication::Get().ExternalModalStart();
 			}
 
-			if (SUCCEEDED(FileDialog->Show(ParentWindow)))
+			const HRESULT ShowResult = FileDialog->Show(ParentWindow);
+
+			if (bSlateInitialized)
+			{
+				FSlateApplication::Get().ExternalModalStop();
+			}
+
+			if (SUCCEEDED(ShowResult))
 			{
 				TComPtr<IShellItemArray> Results;
 				if (SUCCEEDED(FileDialog->GetResults(&Results)))
