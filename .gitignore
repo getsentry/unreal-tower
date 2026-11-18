@@ -87,6 +87,9 @@ DerivedDataCache/*
 # Sentry
 **/sentry.properties
 
+# Sentry Unreal SDK
+Plugins/Sentry/
+
 # Unreal CLI
 dist
 
