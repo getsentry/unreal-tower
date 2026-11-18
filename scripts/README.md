@@ -23,4 +23,4 @@ pwsh scripts/setup-sentry-sdk.ps1 -LocalPath <path-to-sentry-unreal>
 
 Close the Unreal Editor before running the script: every run replaces the whole `Plugins/Sentry` directory, including its compiled `Binaries` and `Intermediate` folders. If something fails, the existing plugin is left in place.
 
-To change the release the game builds with, edit `version` in `sentry-unreal.properties`. A daily workflow opens a PR for this when sentry-unreal publishes a new release.
+To change the release the game builds with, edit `version` in `sentry-unreal.properties`.
