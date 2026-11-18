@@ -22,6 +22,12 @@ jobs:
       - name: Free up disk space
         run: ./checkout/.github/scripts/clean-storage-linux.sh
 
+      - name: Set up Sentry SDK
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./checkout/scripts/setup-sentry-sdk.ps1
+
       - name: Move Docker data root to /mnt
         # The UE docker image is too large for the runner's root disk; the Azure
         # temp disk mounted at /mnt has more headroom.

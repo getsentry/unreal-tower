@@ -26,12 +26,10 @@ jobs:
           repository: ${{ github.repository }}
           run-id: ${{ steps.get-run.outputs.run-id }}
 
-      - name: Check out sentry-cli
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          sparse-checkout: Plugins/Sentry/Source/ThirdParty/CLI
-          sparse-checkout-cone-mode: false
-          path: repo
+      - name: Download sentry-cli
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download --repo getsentry/sentry-cli --pattern sentry-cli-Linux-x86_64 --dir sentry-cli
 
       - name: Upload system libc for crash symbolication
         # The runtime .so carries the GNU build-id and unwind info Sentry needs to
@@ -44,7 +42,7 @@ jobs:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: |
           set -euo pipefail
-          CLI=repo/Plugins/Sentry/Source/ThirdParty/CLI/sentry-cli-Linux-x86_64
+          CLI=sentry-cli/sentry-cli-Linux-x86_64
           chmod +x "$CLI"
           "$CLI" debug-files upload /lib/x86_64-linux-gnu/libc.so.6
 

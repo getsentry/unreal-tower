@@ -22,6 +22,12 @@ jobs:
       - name: Free up disk space
         run: ./checkout/.github/scripts/clean-storage-linux.sh
 
+      - name: Set up Sentry SDK
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./checkout/scripts/setup-sentry-sdk.ps1
+
       - name: Log in to GitHub package registry
         uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2
         with:
