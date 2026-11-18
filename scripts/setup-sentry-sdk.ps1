@@ -197,7 +197,7 @@ function Move-ExistingPlugin([string]$TargetDir, [string]$BackupDir)
     }
     catch
     {
-        Fail "Could not move the existing Plugins/Sentry out of the way: $($_.Exception.InnerException.Message ?? $_.Exception.Message)" `
+        Fail "Could not move the existing Plugins/Sentry out of the way: $(($_.Exception.InnerException ?? $_.Exception).Message)" `
             'Close the Unreal Editor and any running builds, then retry. The existing plugin was not changed.'
     }
 }
@@ -358,6 +358,14 @@ function Invoke-Setup
     # Staging lives inside the project (same volume, so moves are renames) and outside Plugins/
     # (so a leftover copy never gets picked up as a second Sentry plugin).
     $staging = Join-Path $projectRoot 'Intermediate/SentrySdkSetup'
+    # The existing plugin is moved here while the new one goes in. It lives outside the staging
+    # directory so it survives a failed restore (or an interrupted run) instead of being cleaned up.
+    $backupDir = Join-Path $projectRoot 'Intermediate/SentrySdkSetup-previous'
+    if (Test-Path -LiteralPath $backupDir)
+    {
+        Fail "A backup of Plugins/Sentry from an earlier failed run exists: $backupDir" `
+            'Move it back to Plugins/Sentry (or delete it if it is not needed), then retry.'
+    }
     if (Test-Path -LiteralPath $staging) { Remove-Item -LiteralPath $staging -Recurse -Force }
     New-Item -ItemType Directory -Path $staging -Force | Out-Null
     New-Item -ItemType Directory -Path (Join-Path $projectRoot 'Plugins') -Force | Out-Null
@@ -402,7 +410,6 @@ function Invoke-Setup
         }
 
         Invoke-Step 'Replacing Plugins/Sentry' {
-            $backupDir = Join-Path $staging 'previous'
             $backedUp = Move-ExistingPlugin $targetDir $backupDir
             try
             {
@@ -410,9 +417,23 @@ function Invoke-Setup
             }
             catch
             {
-                if ($backedUp) { [System.IO.Directory]::Move($backupDir, $targetDir) }
-                Fail "Could not install the new plugin into Plugins/Sentry: $($_.Exception.InnerException.Message ?? $_.Exception.Message)" `
-                    ($backedUp ? 'The previous plugin was restored.' : '')
+                $installError = ($_.Exception.InnerException ?? $_.Exception).Message
+                if (-not $backedUp) { Fail "Could not install the new plugin into Plugins/Sentry: $installError" }
+                try
+                {
+                    [System.IO.Directory]::Move($backupDir, $targetDir)
+                }
+                catch
+                {
+                    Fail "Could not install the new plugin into Plugins/Sentry ($installError) or restore the previous one ($(($_.Exception.InnerException ?? $_.Exception).Message))." `
+                        "The previous plugin is at $backupDir; move it back to Plugins/Sentry."
+                }
+                Fail "Could not install the new plugin into Plugins/Sentry: $installError" 'The previous plugin was restored.'
+            }
+            if ($backedUp)
+            {
+                try { Remove-Item -LiteralPath $backupDir -Recurse -Force }
+                catch { Write-Warn "Could not delete the backup of the previous plugin; delete $backupDir before the next run." }
             }
         }
     }
