@@ -87,7 +87,7 @@ DerivedDataCache/*
 # Sentry
 **/sentry.properties
 
-# Sentry Unreal SDK plugin, installed with scripts/setup-sentry-sdk.ps1
+# Sentry Unreal SDK plugin (not committed, see README)
 Plugins/Sentry/
 
 # Unreal CLI

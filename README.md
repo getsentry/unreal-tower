@@ -17,7 +17,6 @@ A Sentry-themed tower defence game written for Unreal Engine in C++/Blueprints f
 
 * Windows
 * Unreal Engine 5.8
-* [PowerShell 7](https://learn.microsoft.com/powershell/scripting/install/installing-powershell) and the [GitHub CLI](https://cli.github.com), logged in with `gh auth login` (to set up the Sentry plugin)
 
 ## How to run locally
 
@@ -25,20 +24,13 @@ A Sentry-themed tower defence game written for Unreal Engine in C++/Blueprints f
 * Get the [Epic Games Launcher](https://store.epicgames.com/en-US/download)
 * Navigate to Unreal Engine -> Library and then click on "Engine Versions +" - Select Engine version 5.8.X
 
-### 2. Set up the Sentry plugin
-The [Sentry Unreal SDK](https://github.com/getsentry/sentry-unreal) plugin is not committed to this repo. Its version is pinned in [`sentry-unreal.properties`](sentry-unreal.properties). Install it into `Plugins/Sentry` with:
+### 2. Add the Sentry plugin
+The [Sentry Unreal SDK](https://github.com/getsentry/sentry-unreal) plugin is not included in this repo.
+* Open the [sentry-unreal releases page](https://github.com/getsentry/sentry-unreal/releases) and find the release with the version listed in [`sentry-unreal.properties`](sentry-unreal.properties)
+* Download `sentry-unreal-<version>-engine5.8.zip` from its assets
+* Extract it into a `Plugins/Sentry` folder in this project, so that the file `Plugins/Sentry/Sentry.uplugin` exists
 
-```
-pwsh scripts/setup-sentry-sdk.ps1
-```
-
-Run it again whenever the pinned version changes. Close the editor first: the script replaces the whole `Plugins/Sentry` directory.
-
-Without the script, download `sentry-unreal-<version>.zip` (the one without an engine version in its name) for the pinned version from the [sentry-unreal releases](https://github.com/getsentry/sentry-unreal/releases) and extract it into `Plugins/Sentry`.
-
-To try unreleased plugin changes:
-* `pwsh scripts/setup-sentry-sdk.ps1 -Ref <branch-or-commit>` installs plugin sources from a sentry-unreal branch or commit with the binaries of the pinned release.
-* `pwsh scripts/setup-sentry-sdk.ps1 -LocalPath <path-to-sentry-unreal>` links `Plugins/Sentry` to a local sentry-unreal checkout. Set up the checkout with its own init script first, so it has the SDK binaries.
+To install the plugin from the command line instead, or to try unreleased plugin changes, see [Setting up the Sentry plugin with a script](scripts/README.md).
 
 ### 3. Run the game
 * Open `SentryTower.uproject`, or pick it in the Epic Games Launcher under "My Projects"
