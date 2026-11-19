@@ -11,6 +11,7 @@
 #include "SentryTransaction.h"
 #include "SentryTransactionContext.h"
 #include "Interfaces/IHttpResponse.h"
+#include "UObject/StrongObjectPtr.h"
 
 void USentryTowerGameInstance::Init()
 {
@@ -65,7 +66,8 @@ void USentryTowerGameInstance::BuyUpgrade(const FOnBuyComplete& OnBuyComplete)
 {
 	USentrySubsystem* Sentry = GEngine->GetEngineSubsystem<USentrySubsystem>();
 
-	USentryTransaction* CheckoutTransaction = Sentry->StartTransaction(TEXT("checkout"), TEXT("http.client"), true);
+	// Strong pointers keep these UObjects alive until the async HTTP callback below has run
+	TStrongObjectPtr<USentryTransaction> CheckoutTransaction(Sentry->StartTransaction(TEXT("checkout"), TEXT("http.client"), true));
 
 	USentrySpan* ProcessSpan = CheckoutTransaction->StartChildSpan(TEXT("task"), TEXT("process_upgrade_data"), true);
 
@@ -82,7 +84,7 @@ void USentryTowerGameInstance::BuyUpgrade(const FOnBuyComplete& OnBuyComplete)
 
 	ProcessSpan->Finish();
 
-	USentrySpan* CheckoutSpan = CheckoutTransaction->StartChildSpan(TEXT("task"), TEXT("checkout_request"), true);
+	TStrongObjectPtr<USentrySpan> CheckoutSpan(CheckoutTransaction->StartChildSpan(TEXT("task"), TEXT("checkout_request"), true));
 	FString Domain = TEXT("https://flask.empower-plant.com");
 	FString Endpoint = TEXT("/checkout");
 	FString CheckoutURL = Domain + Endpoint;
@@ -104,7 +106,7 @@ void USentryTowerGameInstance::BuyUpgrade(const FOnBuyComplete& OnBuyComplete)
 
 	HttpRequest->SetContentAsString(JsonString);
 
-	HttpRequest->OnProcessRequestComplete().BindLambda([=](FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful)
+	HttpRequest->OnProcessRequestComplete().BindLambda([CheckoutTransaction, CheckoutSpan, OnBuyComplete](FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful)
 	{
 		CheckoutSpan->Finish();
 
